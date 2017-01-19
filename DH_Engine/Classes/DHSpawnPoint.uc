@@ -3,7 +3,7 @@
 // Darklight Games (c) 2008-2016
 //==============================================================================
 
-class DHSpawnPoint extends DHSpawnPointComponent
+class DHSpawnPoint extends DHSpawnPointBase
     hidecategories(Lighting,LightColor,Karma,Force,Sound)
     abstract;
 
@@ -123,7 +123,7 @@ function Reset()
 
 simulated function bool CanSpawn(DHGameReplicationInfo GRI, int TeamIndex, int RoleIndex, int SquadIndex, int VehiclePoolIndex)
 {
-    local class<Vehicle>    VehicleClass;
+    local class<ROVehicle>  VehicleClass;
     local DHRoleInfo        RI;
 
     if (!super.CanSpawn(GRI, TeamIndex, RoleIndex, SquadIndex, VehiclePoolIndex))
@@ -131,32 +131,26 @@ simulated function bool CanSpawn(DHGameReplicationInfo GRI, int TeamIndex, int R
         return false;
     }
 
-    Log("TeamIndex" @ TeamIndex);
-    Log("RoleIndex" @ RoleIndex);
-
     RI = GRI.GetRole(TeamIndex, RoleIndex);
-    VehicleClass = GRI.GetVehiclePoolVehicleClass(VehiclePoolIndex);
+    VehicleClass = class<ROVehicle>(GRI.GetVehiclePoolVehicleClass(VehiclePoolIndex));
 
     if (RI == none)
     {
-        Log("b");
         return false;
     }
 
     if (RI.default.bCanUseMortars && CanSpawnMortars())
     {
-        Log("c");
         return true;
     }
 
-    if (VehicleClass == none)
+    if (VehicleClass != none)
+    {
+        return CanSpawnVehicle(VehicleClass);
+    }
+    else
     {
         return CanSpawnInfantry() || (RI.default.bCanBeTankCrew && CanSpawnVehicles());
-    }
-
-    if (class<ROVehicle>(VehicleClass) != none && TeamIndex == class<ROVehicle>(VehicleClass).default.VehicleTeam)
-    {
-        return CanSpawnVehicles() || (!class<ROVehicle>(VehicleClass).default.bMustBeTankCommander && CanSpawnInfantryVehicles());
     }
 
     return true;
@@ -164,20 +158,33 @@ simulated function bool CanSpawn(DHGameReplicationInfo GRI, int TeamIndex, int R
 
 simulated function bool CanSpawnVehicle(class<ROVehicle> VehicleClass)
 {
-    // TODO: this is the relevant bit for spawn points, put this in an overridden function
-    if (!CanSpawnVehicles() && !(CanSpawnInfantryVehicles() && !VehicleClass.default.bMustBeTankCommander))
-    {
-        return false;
-    }
-
-    return true;
+    return VehicleClass != none &&
+           TeamIndex == VehicleClass.default.VehicleTeam &&
+           (CanSpawnVehicles() || (!VehicleClass.default.bMustBeTankCommander && CanSpawnInfantryVehicles()));
 }
 
 function bool PerformSpawn(DHPlayer PC)
 {
+    local vector SpawnLocation;
+    local rotator SpawnRotation;
+
+    if (CanSpawn(PC.GameReplicationInfo, PC.GetTeamNum(), Pc.GetRoleIndex(), PC.GetSquadIndex(), PC.VehiclePoolIndex))
+    {
+        GetSpawnPosition(SpawnLocation, SpawnRotation, PC.VehiclePoolIndex);
+
+        if (PC.VehiclePoolIndex >= 0)
+        {
+            // spawn vehicle
+        }
+        else
+        {
+            // spawn infantry
+        }
+    }
 }
 
-function GetSpawnPosition(out vector SpawnLocation, out rotator SpawnRotation, int VehiclePoolIndex, float CollisionRadius)
+// TODO: not sure what to do with this
+function GetSpawnPosition(out vector SpawnLocation, out rotator SpawnRotation, int VehiclePoolIndex)
 {
     local Controller    C;
     local Pawn          P;
@@ -186,19 +193,26 @@ function GetSpawnPosition(out vector SpawnLocation, out rotator SpawnRotation, i
     local array<int>    LocationHintIndices;
     local int           LocationHintIndex, i, j, k;
     local bool          bIsBlocked;
+    local class<ROVehicle>  VehicleClass;
+    local float         CollisionRadius;
 
-    if (VehiclePoolIndex == -1)
+    if (VehiclePoolIndex >= 0)
     {
-        LocationHints = InfantryLocationHints;
+        LocationHints = VehicleLocationHints;
+        VehicleClass = class<ROVehicle>(GRI.GetVehiclePoolVehicleClass(VehiclePoolIndex));
+        CollisionRadius = VehicleClass.default.CollisionRadius;
     }
     else
     {
-        LocationHints = VehicleLocationHints;
+        LocationHints = InfantryLocationHints;
+        CollisionRadius = class'DHPawn'.default.CollisionRadius;
     }
 
     // Scramble location hint indices so we don't use the same ones repeatedly
     LocationHintIndices = class'UArray'.static.Range(0, LocationHints.Length - 1);
     class'UArray'.static.IShuffle(LocationHintIndices);
+
+    // TODO: make this functionality generic so it applied toall spawn point types?
 
     // Put location hints with enemies nearby at the end of the array to be evaluated last
     if (LocationHintIndices.Length > 1)

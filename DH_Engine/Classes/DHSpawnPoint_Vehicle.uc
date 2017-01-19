@@ -2,10 +2,14 @@
 // Darkest Hour: Europe '44-'45
 // Darklight Games (c) 2008-2016
 //==============================================================================
+// This is a spawn point that gets attached to "spawn vehicles" like the
+// halftracks.
+//==============================================================================
 
-class DHSpawnPoint_Vehicle extends DHSpawnPointComponent;
+class DHSpawnPoint_Vehicle extends DHSpawnPointBase
+    notplaceable;
 
-const   SPAWN_VEHICLES_BLOCK_RADIUS = 2048.0;
+const SPAWN_VEHICLES_BLOCK_RADIUS = 2048.0;
 
 var DHVehicle Vehicle;
 
@@ -30,7 +34,7 @@ function Timer()
             {
                 if (Vehicle.GetTeamNum() != P.GetTeamNum())
                 {
-                    BlockFlags = BlockFlags | class'DHSpawnPointComponent'.default.BLOCKED_EnemiesNearby;
+                    BlockFlags = BlockFlags | class'DHSpawnPointBase'.default.BLOCKED_EnemiesNearby;
 
                     break;
                 }
@@ -44,7 +48,7 @@ function Timer()
 
             if (O != none && O.bActive && O.WithinArea(Vehicle))
             {
-                BlockFlags = BlockFlags | class'DHSpawnPointComponent'.default.BLOCKED_InObjective;
+                BlockFlags = BlockFlags | class'DHSpawnPointBase'.default.BLOCKED_InObjective;
 
                 break;
             }
@@ -53,7 +57,7 @@ function Timer()
         // Check if a suitable entry vehicle is available for non-crew
         if (FindEntryVehicle(false) == none)
         {
-            BlockFlags = BlockFlags | class'DHSpawnPointComponent'.default.BLOCKED_Full;
+            BlockFlags = BlockFlags | class'DHSpawnPointBase'.default.BLOCKED_Full;
         }
     }
 }
@@ -133,13 +137,11 @@ function bool PerformSpawn(DHPlayer PC)
     local array<int> ExitPositionIndices;
     local int        i, RoleIndex;
     local DarkestHourGame G;
-    local DHPlayerReplicationInfo PRI;
     local byte Team;
 
     G = DarkestHourGame(Level.Game);
-    PRI = DHPlayerReplicationInfo(PC.PlayerReplicationInfo);
 
-    if (PC == none || GRI == none || Vehicle == none || G == none || PRI == none)
+    if (PC == none || GRI == none || Vehicle == none || G == none)
     {
         return false;
     }
@@ -160,7 +162,7 @@ function bool PerformSpawn(DHPlayer PC)
     RoleIndex = GRI.GetRoleIndexAndTeam(PC.GetRoleInfo(), Team);
 
     // Check if we can deploy into or near the vehicle
-    if (CanSpawn(GRI, PC.GetTeamNum(), RoleIndex, PRI.SquadIndex, PC.VehiclePoolIndex))
+    if (CanSpawn(GRI, PC.GetTeamNum(), RoleIndex, PC.GetSquadIndex(), PC.VehiclePoolIndex))
     {
         // Randomise exit locations
         ExitPositionIndices = class'UArray'.static.Range(0, Vehicle.ExitPositions.Length - 1);

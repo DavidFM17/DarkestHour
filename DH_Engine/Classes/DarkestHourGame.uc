@@ -4193,6 +4193,73 @@ function BroadcastSquad(Controller Sender, coerce string Msg, optional name Type
     }
 }
 
+function Pawn SpawnPawn(DHPlayer C, vector SpawnLocation, rotator SpawnRotation)
+{
+    if (C == none)
+    {
+        return none;
+    }
+
+    if (C.PreviousPawnClass != none && C.PawnClass != C.PreviousPawnClass)
+    {
+        BaseMutator.PlayerChangedClass(C);
+    }
+
+    // Spawn player pawn
+    if (C.PawnClass != none)
+    {
+        C.Pawn = Spawn(C.PawnClass,,, SpawnLocation, SpawnRotation);
+    }
+
+    // If spawn failed, try again using default player class
+    if (C.Pawn == none)
+    {
+        C.Pawn = Spawn(GetDefaultPlayerClass(C),,, SpawnLocation, SpawnRotation);
+    }
+
+    // Hard spawning the player at the spawn location failed, most likely because spawn function was blocked
+    // Try again with black room spawn & teleport them to spawn location
+    if (C.Pawn == none)
+    {
+        DeployRestartPlayer(C, false, true);
+
+        if (C.Pawn != none)
+        {
+            if (C.TeleportPlayer(SpawnLocation, SpawnRotation))
+            {
+                return C.Pawn; // exit as we used old spawn system & don't need to do anything else in this function
+            }
+            else
+            {
+                C.Pawn.Suicide(); // teleport failed & pawn is still in the black room, so kill it
+            }
+        }
+    }
+
+    // Still haven't managed to spawn a player pawn, so go to state 'Dead' & exit
+    if (C.Pawn == none)
+    {
+        C.GotoState('Dead');
+        C.ClientGotoState('Dead', 'Begin');
+
+        return none;
+    }
+
+    // We have a new player pawn, so handle the necessary set up & possession
+    C.TimeMargin = -0.1;
+
+    C.Pawn.LastStartTime = Level.TimeSeconds;
+    C.PreviousPawnClass = C.Pawn.Class;
+    C.Possess(C.Pawn);
+    C.PawnClass = C.Pawn.Class;
+    C.Pawn.PlayTeleportEffect(true, true);
+    C.ClientSetRotation(C.Pawn.Rotation);
+
+    AddDefaultInventory(C.Pawn);
+
+    return C.Pawn;
+}
+
 defaultproperties
 {
     ServerTickForInflation=20.0

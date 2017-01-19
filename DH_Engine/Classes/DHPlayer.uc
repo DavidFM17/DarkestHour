@@ -2427,10 +2427,9 @@ function ServerSetPlayerInfo(byte newTeam, byte newRole, byte NewWeapon1, byte N
                 RI = DHRoleInfo(Game.GetRoleInfo(PlayerReplicationInfo.Team.TeamIndex, DesiredRole));
             }
 
-            Log("spawn settings valid?");
-            Log(GRI.AreSpawnSettingsValid(NewSpawnPointIndex, GetTeamNum(), DesiredRole, PRI.SquadIndex, NewVehiclePoolIndex));
+            Log(GRI.CanSpawnWithParameters(NewSpawnPointIndex, GetTeamNum(), DesiredRole, PRI.SquadIndex, NewVehiclePoolIndex));
 
-            if (GRI != none && GRI.AreSpawnSettingsValid(NewSpawnPointIndex, GetTeamNum(), DesiredRole, PRI.SquadIndex, NewVehiclePoolIndex))
+            if (GRI != none && GRI.CanSpawnWithParameters(NewSpawnPointIndex, GetTeamNum(), DesiredRole, PRI.SquadIndex, NewVehiclePoolIndex))
             {
                 if (NewVehiclePoolIndex != VehiclePoolIndex)
                 {
@@ -4177,6 +4176,49 @@ exec function Speak(string ChannelTitle)
     }
 }
 
+simulated function int GetSquadIndex()
+{
+    local DHPlayerReplicationInfo PRI;
+
+    PRI = DHPlayerReplicationInfo(PlayerReplicationInfo);
+
+    if (PRI != none)
+    {
+        return PRI.SquadIndex;
+    }
+
+    return -1;
+}
+
+simulated function int GetSquadMemberIndex()
+{
+    local DHPlayerReplicationInfo PRI;
+
+    PRI = DHPlayerReplicationInfo(PlayerReplicationInfo);
+
+    if (PRI != none)
+    {
+        return PRI.SquadMemberIndex;
+    }
+
+    return -1;
+}
+
+simulated function int GetRoleIndex()
+{
+    local DHGameReplicationInfo GRI;
+    local byte TeamIndex;
+
+    GRI = DHGameReplicationInfo(GameReplicationInfo);
+
+    if (GRI != none)
+    {
+        return GRI.GetRoleIndexAndTeam(GetRoleInfo(), TeamIndex);
+    }
+
+    return -1;
+}
+
 //<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 // START SQUAD DEBUG FUNCTIONS
 //<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
@@ -4448,6 +4490,20 @@ exec function HideOrderMenu()
 
         SquadOrderInteraction = none;
     }
+}
+
+function bool TeleportPlayer(vector SpawnLocation, rotator SpawnRotation)
+{
+    if (Pawn != none && Pawn.SetLocation(SpawnLocation))
+    {
+        Pawn.SetRotation(SpawnRotation);
+        Pawn.SetViewRotation(SpawnRotation);
+        Pawn.ClientSetRotation(SpawnRotation);
+
+        return true;
+    }
+
+    return false;
 }
 
 defaultproperties

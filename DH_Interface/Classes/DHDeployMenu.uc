@@ -447,7 +447,7 @@ function UpdateSpawnPoints()
             }
 
             // BLOCK status
-/*            if (GRI.SpawnPoints[i].BlockFlags != class'DHSpawnPointComponent'.default.BLOCKED_None)
+/*            if (GRI.SpawnPoints[i].BlockFlags != class'DHSpawnPointBase'.default.BLOCKED_None)
             {
                 p_Map.b_SpawnVehicles[i].StyleName = "DHSpawnVehicleBlockedButtonStyle";
             }
@@ -865,7 +865,7 @@ function UpdateButtons()
         // spawning system. If we're using the new spawning system, we have to check
         // that our pending parameters are valid.
         if (PC.ClientLevelInfo.SpawnMode == ESM_RedOrchestra ||
-            (li_Vehicles.Index >= 0 && GRI.AreSpawnSettingsValid(SpawnPointIndex,
+            (li_Vehicles.Index >= 0 && GRI.CanSpawnWithParameters(SpawnPointIndex,
                                                                  CurrentTeam,
                                                                  GRI.GetRoleIndexAndTeam(DHRoleInfo(li_Roles.GetObject()), Team),
                                                                  SquadIndex,

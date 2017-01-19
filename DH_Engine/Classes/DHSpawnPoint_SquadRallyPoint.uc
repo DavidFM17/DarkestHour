@@ -3,7 +3,8 @@
 // Darklight Games (c) 2008-2016
 //==============================================================================
 
-class DHSpawnPoint_SquadRallyPoint extends DHSpawnPointComponent;
+class DHSpawnPoint_SquadRallyPoint extends DHSpawnPointBase
+    notplaceable;
 
 var DHSquadReplicationInfo SRI;
 var int SquadIndex;
@@ -55,6 +56,11 @@ function bool CanSpawn(DHGameReplicationInfo GRI, int TeamIndex, int RoleIndex, 
         return false;
     }
 
+    if (SpawnsRemaining == 1)
+    {
+        // TODO: must be SL to use; where are we gonna get this from? a PRI?
+    }
+
     return true;
 }
 
@@ -89,13 +95,13 @@ function Timer()
     }
 
     // TODO: find SRI?
-
 }
 
 function bool HasEnemiesNearby()
 {
     local Pawn P;
 
+    // TODO: remove magic number
     foreach RadiusActors(class'Pawn', P, class'DHUnits'.static.MetersToUnreal(25))
     {
         if (P == none)
@@ -110,6 +116,40 @@ function bool HasEnemiesNearby()
     }
 
     return false;
+}
+
+function bool PerformSpawn(DHPlayer PC)
+{
+    local int RoleIndex;
+    local DarkestHourGame G;
+    local vector SpawnLocation;
+    local rotator SpawnRotation;
+
+    G = DarkestHourGame(Level.Game);
+
+    if (PC == none || PC.Pawn != none || G == none)
+    {
+        return;
+    }
+
+    if (CanSpawn(PC.GameReplicationInfo, PC.GetTeamNum(), PC.GetRoleIndex(), PC.GetSquadIndex(), PC.VehiclePoolIndex) &&
+        GetSpawnPosition(SpawnLocation, SpawnRotation) &&
+        G.SpawnPawn(PC, SpawnLocation, SpawnRotation != none))
+    {
+        return true;
+    }
+
+    return false;
+}
+
+function OnSpawn()
+{
+    SpawnsRemaining -= 1;
+
+    if (SpawnsRemaining <= 0)
+    {
+        Destroy();  // TODO: invalidate people's spawn points
+    }
 }
 
 defaultproperties

@@ -80,7 +80,7 @@ var byte                MaxTeamVehicles[2];
 
 const SPAWN_POINTS_MAX = 63;
 
-var DHSpawnPointComponent   SpawnPoints[SPAWN_POINTS_MAX];
+var DHSpawnPointBase   SpawnPoints[SPAWN_POINTS_MAX];
 
 const SPAWN_VEHICLES_MAX = 8;
 
@@ -184,9 +184,8 @@ simulated function PostBeginPlay()
 // Spawn Point Functions
 //------------------------------------------------------------------------------
 
-simulated function int AddSpawnPoint(DHSpawnPointComponent SP)
+simulated function int AddSpawnPoint(DHSpawnPointBase SP)
 {
-    // TODO: add, make sure doesn't already exist etc.
     local int i;
 
     if (SP == none)
@@ -214,9 +213,9 @@ simulated function int AddSpawnPoint(DHSpawnPointComponent SP)
     return -1;
 }
 
-simulated function DHSpawnPointComponent GetSpawnPoint(int SpawnPointIndex)
+simulated function DHSpawnPointBase GetSpawnPoint(int SpawnPointIndex)
 {
-    if (SpawnPointIndex < 0 || SpawnPointIndex > arraycount(SpawnPoints))
+    if (SpawnPointIndex < 0 || SpawnPointIndex >= arraycount(SpawnPoints))
     {
         return none;
     }
@@ -231,8 +230,6 @@ simulated function bool IsRallyPointIndexValid(DHPlayer PC, byte RallyPointIndex
 
     if (PC == none || PC.SquadReplicationInfo == none)
     {
-        Log("a");
-
         return false;
     }
 
@@ -242,19 +239,15 @@ simulated function bool IsRallyPointIndexValid(DHPlayer PC, byte RallyPointIndex
 
     if (RP == none || PRI == none || PRI.Team.TeamIndex != RP.TeamIndex || PRI.SquadIndex != RP.SquadIndex)
     {
-        Log("b");
-
         return false;
     }
-
-    Log("C");
 
     return true;
 }
 
-simulated function bool AreSpawnSettingsValid(int SpawnPointIndex, int TeamIndex, int RoleIndex, int SquadIndex, int VehiclePoolIndex)
+simulated function bool CanSpawnWithParameters(int SpawnPointIndex, int TeamIndex, int RoleIndex, int SquadIndex, int VehiclePoolIndex)
 {
-    local DHSpawnPointComponent SP;
+    local DHSpawnPointBase SP;
 
     SP = GetSpawnPoint(SpawnPointIndex);
 
@@ -263,7 +256,7 @@ simulated function bool AreSpawnSettingsValid(int SpawnPointIndex, int TeamIndex
         return false;
     }
 
-    return SP.CanSpawn(self, TeamIndex, RoleIndex, SquadIndex, VehiclePoolIndex);
+    return SP.CanSpawnWithParameters(self, TeamIndex, RoleIndex, SquadIndex, VehiclePoolIndex);
 }
 
 //------------------------------------------------------------------------------
@@ -730,21 +723,6 @@ function AddHelpRequest(PlayerReplicationInfo PRI, int ObjectiveID, int RequestT
     {
         super.AddHelpRequest(PRI, ObjectiveID, RequestType, RequestLocation);
     }
-}
-
-simulated function byte GetSpawnVehicleBlockFlags(Vehicle V)
-{
-    local int i;
-
-    for (i = 0; i < arraycount(SpawnVehicles); ++i)
-    {
-        if (SpawnVehicles[i].Vehicle == V)
-        {
-            return GetSpawnPoint(SpawnVehicles[i].SpawnPointIndex).BlockFlags;
-        }
-    }
-
-    return class'DHSpawnPointComponent'.default.BLOCKED_None;
 }
 
 simulated function string GetTeamScaleString(int Team)

@@ -5,17 +5,22 @@
 // This is a generic spawn point. When squads were added, there was a di
 //==============================================================================
 
-class DHSpawnPointComponent extends Actor;
+class DHSpawnPointBase extends Actor
+    abstract;
 
-var const byte BLOCKED_None;
-var const byte BLOCKED_EnemiesNearby;
-var const byte BLOCKED_InObjective;
-var const byte BLOCKED_Full;
+enum ESpawnPointBlockReason
+{
+    SPBR_None,
+    SPBR_EnemiesNearby,
+    SPBR_InObjective,
+    SPBR_Full,
+    SPBR_Constructing
+};
 
-var private bool bIsActive;
 var int SpawnPointIndex;
 var int TeamIndex;
-var int BlockFlags;
+var ESpawnPointBlockReason BlockReason;
+var private bool bIsActive;
 
 var protected DHGameReplicationInfo GRI;
 
@@ -30,15 +35,8 @@ var float SpawnKillProtectionTime;
 replication
 {
     reliable if (Role == ROLE_Authority)
-        TeamIndex, SpawnPointIndex, BlockFlags, bIsActive;
+        SpawnPointIndex, TeamIndex, BlockReason, bIsActive;
 }
-
-
-simulated function bool CanSpawnVehicle(class<ROVehicle> VehicleClass);
-simulated function string GetSpawnPointName();
-simulated function bool DrySpawn();
-function bool PerformSpawn(DHPlayer PC);
-function GetSpawnPosition(out vector SpawnLocation, out rotator SpawnRotation, int VehiclePoolIndex, float CollisionRadius);
 
 simulated event PostBeginPlay()
 {
@@ -49,6 +47,24 @@ simulated event PostBeginPlay()
         GRI = DHGameReplicationInfo(Level.Game.GameReplicationInfo);
         GRI.AddSpawnPoint(self);
     }
+}
+
+function bool PerformSpawn(DHPlayer PC);
+
+simulated function bool CanSpawnVehicle(class<ROVehicle> VehicleClass)
+{
+    return VehicleClass != none;
+}
+
+simulated function bool CanSpawnRole(DHRoleInfo RI)
+{
+    return RI != none;
+}
+
+function GetSpawnPosition(out vector SpawnLocation, out rotator SpawnRotation, int VehiclePoolIndex)
+{
+    SpawnLocation = Location;
+    SpawnRotation = Rotation;
 }
 
 // Returns true if the spawn point is "visible" to a player with the arguments
@@ -65,13 +81,28 @@ simulated function bool IsVisibleTo(int TeamIndex, int RoleIndex, int SquadIndex
 
 // A blocked spawn point is an active spawn point that, for whatever reason,
 // is not currently available to be spawned on.
-simulated function bool IsBlocked();
+simulated function bool IsBlocked()
+{
+    return BlockReason != SPBR_None;
+}
 
 // Returns true if the given arguments are satisfactory for spawning on this
 // spawn point.
-simulated function bool CanSpawn(DHGameReplicationInfo GRI, int TeamIndex, int RoleIndex, int SquadIndex, int VehiclePoolIndex)
+simulated function bool CanSpawnWithParameters(DHGameReplicationInfo GRI, int TeamIndex, int RoleIndex, int SquadIndex, int VehiclePoolIndex)
 {
+    local DHRoleInfo RI;
+
     if (self.TeamIndex != TeamIndex || !bIsActive || IsBlocked())
+    {
+        return false;
+    }
+
+    if (!CanSpawnRole(GRI.GetRole(TeamIndex, RoleIndex)))
+    {
+        return false;
+    }
+
+    if (VehiclePoolIndex >= 0 && !CanSpawnVehicle(VehiclePoolIndex))
     {
         return false;
     }
@@ -105,6 +136,8 @@ function SetIsActive(bool bIsActive)
         }
     }
 }
+
+function OnSpawn();
 
 defaultproperties
 {

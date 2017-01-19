@@ -644,17 +644,15 @@ simulated function DrawHudPassC(Canvas C)
     // Spawn vehicle deploy icon
     if (V != none && V.SpawnPoint != none)
     {
-        BlockFlags = V.SpawnPoint.BlockFlags;
-
-        if (BlockFlags == class'DHSpawnPointComponent'.default.BLOCKED_None)
+        if (V.SpawnPoint.BlockReason == SPBR_None)
         {
             DrawSpriteWidget(C, DeployOkayIcon);
         }
-        else if ((BlockFlags & class'DHSpawnPointComponent'.default.BLOCKED_InObjective) != 0)
+        else if (V.SpawnPoint.BlockReason == SPBR_InObjective)
         {
             DrawSpriteWidget(C, DeployInObjectiveIcon);
         }
-        else if ((BlockFlags & class'DHSpawnPointComponent'.default.BLOCKED_EnemiesNearby) != 0)
+        else if (V.SpawnPoint.BlockReason == SPBR_EnemiesNearby)
         {
             DrawSpriteWidget(C, DeployEnemiesNearbyIcon);
         }
@@ -4254,7 +4252,7 @@ exec function ShrinkHUD()
 simulated function DrawSpectatingHud(Canvas C)
 {
     local DHPlayerReplicationInfo PRI;
-    local DHSpawnPointComponent   SP;
+    local DHSpawnPointBase   SP;
     local DHPlayer                PC;
     local float  Scale, X, Y, strX, strY, NameWidth, SmallH, XL;
     local int    Time;
