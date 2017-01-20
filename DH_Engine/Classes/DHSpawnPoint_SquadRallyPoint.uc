@@ -44,9 +44,9 @@ simulated function bool IsBlocked()
     return IsInState('Constructing');
 }
 
-function bool CanSpawn(DHGameReplicationInfo GRI, int TeamIndex, int RoleIndex, int SquadIndex, int VehiclePoolIndex)
+function bool CanSpawnWithParameters(DHGameReplicationInfo GRI, int TeamIndex, int RoleIndex, int SquadIndex, int VehiclePoolIndex)
 {
-    if (!super.CanSpawn(GRI, TeamIndex, RoleIndex, SquadIndex, VehiclePoolIndex))
+    if (!super.CanSpawnWithParameters(GRI, TeamIndex, RoleIndex, SquadIndex, VehiclePoolIndex))
     {
         return false;
     }
@@ -120,7 +120,6 @@ function bool HasEnemiesNearby()
 
 function bool PerformSpawn(DHPlayer PC)
 {
-    local int RoleIndex;
     local DarkestHourGame G;
     local vector SpawnLocation;
     local rotator SpawnRotation;
@@ -133,11 +132,11 @@ function bool PerformSpawn(DHPlayer PC)
     }
 
     if (CanSpawnWithParameters(GRI, PC.GetTeamNum(), PC.GetRoleIndex(), PC.GetSquadIndex(), PC.VehiclePoolIndex) &&
-        GetSpawnPosition(SpawnLocation, SpawnRotation, PC.VehiclePoolIndex) &&
         G.SpawnPawn(PC, SpawnLocation, SpawnRotation) != none)
     {
+        GetSpawnPosition(SpawnLocation, SpawnRotation, PC.VehiclePoolIndex);
         return true;
-    |
+    }
 
     return false;
 }

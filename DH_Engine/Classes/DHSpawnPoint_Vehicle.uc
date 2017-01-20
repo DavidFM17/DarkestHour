@@ -34,7 +34,7 @@ function Timer()
             {
                 if (Vehicle.GetTeamNum() != P.GetTeamNum())
                 {
-                    BlockFlags = BlockFlags | class'DHSpawnPointBase'.default.BLOCKED_EnemiesNearby;
+                    BlockReason = SPBR_EnemiesNearby;
 
                     break;
                 }
@@ -48,7 +48,7 @@ function Timer()
 
             if (O != none && O.bActive && O.WithinArea(Vehicle))
             {
-                BlockFlags = BlockFlags | class'DHSpawnPointBase'.default.BLOCKED_InObjective;
+                BlockReason = SPBR_InObjective;
 
                 break;
             }
@@ -57,14 +57,14 @@ function Timer()
         // Check if a suitable entry vehicle is available for non-crew
         if (FindEntryVehicle(false) == none)
         {
-            BlockFlags = BlockFlags | class'DHSpawnPointBase'.default.BLOCKED_Full;
+            BlockReason = SPBR_Full;
         }
     }
 }
 
-simulated function bool CanSpawn(DHGameReplicationInfo GRI, int TeamIndex, int RoleIndex, int SquadIndex, int VehiclePoolIndex)
+simulated function bool CanSpawnWithParameters(DHGameReplicationInfo GRI, int TeamIndex, int RoleIndex, int SquadIndex, int VehiclePoolIndex)
 {
-    if (!super.CanSpawn(GRI, TeamIndex, RoleIndex, SquadIndex, VehiclePoolIndex))
+    if (!super.CanSpawnWithParameters(GRI, TeamIndex, RoleIndex, SquadIndex, VehiclePoolIndex))
     {
         return false;
     }
@@ -162,7 +162,7 @@ function bool PerformSpawn(DHPlayer PC)
     RoleIndex = GRI.GetRoleIndexAndTeam(PC.GetRoleInfo(), Team);
 
     // Check if we can deploy into or near the vehicle
-    if (CanSpawn(GRI, PC.GetTeamNum(), RoleIndex, PC.GetSquadIndex(), PC.VehiclePoolIndex))
+    if (CanSpawnWithParameters(GRI, PC.GetTeamNum(), RoleIndex, PC.GetSquadIndex(), PC.VehiclePoolIndex))
     {
         // Randomise exit locations
         ExitPositionIndices = class'UArray'.static.Range(0, Vehicle.ExitPositions.Length - 1);
@@ -174,7 +174,7 @@ function bool PerformSpawn(DHPlayer PC)
             // Attempt to deploy at an exit position
             for (i = 0; i < ExitPositionIndices.Length; ++i)
             {
-                if (class'DHSpawnManager'.static.TeleportPlayer(PC, Vehicle.Location + (Vehicle.ExitPositions[ExitPositionIndices[i]] >> Vehicle.Rotation) + Offset, Vehicle.Rotation))
+                if (PC.TeleportPlayer(Vehicle.Location + (Vehicle.ExitPositions[ExitPositionIndices[i]] >> Vehicle.Rotation) + Offset, Vehicle.Rotation))
                 {
                     return true;
                 }

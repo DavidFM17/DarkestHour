@@ -145,10 +145,5 @@ defaultproperties
     SpawnKillProtectionTime=5
     bAlwaysRelevant=true
     RemoteRole=ROLE_SimulatedProxy
-
-    BLOCKED_None=0
-    BLOCKED_EnemiesNearby=1
-    BLOCKED_InObjective=2
-    BLOCKED_Full=4
 }
 

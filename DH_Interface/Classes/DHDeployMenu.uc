@@ -398,7 +398,7 @@ function UpdateSpawnPoints()
 {
     local int i, RoleIndex, SquadIndex;
     local float X, Y;
-//    local eFontScale FS;
+    local eFontScale FS;
     local byte Team;
 
     if (GRI != none)
@@ -432,7 +432,7 @@ function UpdateSpawnPoints()
             p_Map.b_SpawnPoints[i].SetPosition(X, Y, p_Map.b_SpawnPoints[i].WinWidth, p_Map.b_SpawnPoints[i].WinHeight, true);
             p_Map.b_SpawnPoints[i].SetVisibility(true);
 
-            if (GRI.SpawnPoints[i].CanSpawn(GRI, CurrentTeam, RoleIndex, SquadIndex, GetSelectedVehiclePoolIndex()))
+            if (GRI.SpawnPoints[i].CanSpawnWithParameters(GRI, CurrentTeam, RoleIndex, SquadIndex, GetSelectedVehiclePoolIndex()))
             {
                 p_Map.b_SpawnPoints[i].MenuStateChange(MSAT_Blurry);
             }
@@ -446,17 +446,18 @@ function UpdateSpawnPoints()
                 p_Map.b_SpawnPoints[i].MenuStateChange(MSAT_Disabled);
             }
 
+            // TODO: make a universal blocked button style
             // BLOCK status
-/*            if (GRI.SpawnPoints[i].BlockFlags != class'DHSpawnPointBase'.default.BLOCKED_None)
+            if (GRI.SpawnPoints[i].IsBlocked())
             {
-                p_Map.b_SpawnVehicles[i].StyleName = "DHSpawnVehicleBlockedButtonStyle";
+                p_Map.b_SpawnPoints[i].StyleName = "DHSpawnVehicleBlockedButtonStyle";
             }
             else
             {
-                p_Map.b_SpawnVehicles[i].StyleName = "DHSpawnVehicleButtonStyle";
+                p_Map.b_SpawnPoints[i].StyleName = "DHSpawnVehicleButtonStyle";
             }
 
-            p_Map.b_SpawnVehicles[i].Style = Controller.GetStyle(p_Map.b_SpawnVehicles[i].StyleName, FS);*/
+            p_Map.b_SpawnPoints[i].Style = Controller.GetStyle(p_Map.b_SpawnPoints[i].StyleName, FS);
         }
         else
         {
