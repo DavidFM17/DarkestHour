@@ -51,9 +51,9 @@ simulated event PostBeginPlay()
 
 function bool PerformSpawn(DHPlayer PC);
 
-simulated function bool CanSpawnVehicle(class<ROVehicle> VehicleClass)
+simulated function bool CanSpawnVehicle(int VehiclePoolIndex)
 {
-    return VehicleClass != none;
+    return false;
 }
 
 simulated function bool CanSpawnRole(DHRoleInfo RI)
@@ -90,8 +90,6 @@ simulated function bool IsBlocked()
 // spawn point.
 simulated function bool CanSpawnWithParameters(DHGameReplicationInfo GRI, int TeamIndex, int RoleIndex, int SquadIndex, int VehiclePoolIndex)
 {
-    local DHRoleInfo RI;
-
     if (self.TeamIndex != TeamIndex || !bIsActive || IsBlocked())
     {
         return false;
@@ -119,6 +117,7 @@ function SetIsActive(bool bIsActive)
 {
     local Controller C;
     local DHPlayer PC;
+
 
     self.bIsActive = bIsActive;
 

@@ -129,15 +129,15 @@ function bool PerformSpawn(DHPlayer PC)
 
     if (PC == none || PC.Pawn != none || G == none)
     {
-        return;
+        return false;
     }
 
-    if (CanSpawn(PC.GameReplicationInfo, PC.GetTeamNum(), PC.GetRoleIndex(), PC.GetSquadIndex(), PC.VehiclePoolIndex) &&
-        GetSpawnPosition(SpawnLocation, SpawnRotation) &&
-        G.SpawnPawn(PC, SpawnLocation, SpawnRotation != none))
+    if (CanSpawnWithParameters(GRI, PC.GetTeamNum(), PC.GetRoleIndex(), PC.GetSquadIndex(), PC.VehiclePoolIndex) &&
+        GetSpawnPosition(SpawnLocation, SpawnRotation, PC.VehiclePoolIndex) &&
+        G.SpawnPawn(PC, SpawnLocation, SpawnRotation) != none)
     {
         return true;
-    }
+    |
 
     return false;
 }

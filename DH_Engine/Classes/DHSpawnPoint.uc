@@ -121,12 +121,12 @@ function Reset()
     bIsLocked = bIsInitiallyLocked;
 }
 
-simulated function bool CanSpawn(DHGameReplicationInfo GRI, int TeamIndex, int RoleIndex, int SquadIndex, int VehiclePoolIndex)
+simulated function bool CanSpawnWithParameters(DHGameReplicationInfo GRI, int TeamIndex, int RoleIndex, int SquadIndex, int VehiclePoolIndex)
 {
     local class<ROVehicle>  VehicleClass;
     local DHRoleInfo        RI;
 
-    if (!super.CanSpawn(GRI, TeamIndex, RoleIndex, SquadIndex, VehiclePoolIndex))
+    if (!super.CanSpawnWithParameters(GRI, TeamIndex, RoleIndex, SquadIndex, VehiclePoolIndex))
     {
         return false;
     }
@@ -146,18 +146,18 @@ simulated function bool CanSpawn(DHGameReplicationInfo GRI, int TeamIndex, int R
 
     if (VehicleClass != none)
     {
-        return CanSpawnVehicle(VehicleClass);
-    }
-    else
-    {
         return CanSpawnInfantry() || (RI.default.bCanBeTankCrew && CanSpawnVehicles());
     }
 
     return true;
 }
 
-simulated function bool CanSpawnVehicle(class<ROVehicle> VehicleClass)
+simulated function bool CanSpawnVehicle(int VehiclePoolIndex)
 {
+    local class<ROVehicle> VehicleClass;
+
+    VehicleClass = class<ROVehicle>(GRI.GetVehiclePoolVehicleClass(VehiclePoolIndex));
+
     return VehicleClass != none &&
            TeamIndex == VehicleClass.default.VehicleTeam &&
            (CanSpawnVehicles() || (!VehicleClass.default.bMustBeTankCommander && CanSpawnInfantryVehicles()));
@@ -168,7 +168,7 @@ function bool PerformSpawn(DHPlayer PC)
     local vector SpawnLocation;
     local rotator SpawnRotation;
 
-    if (CanSpawn(PC.GameReplicationInfo, PC.GetTeamNum(), Pc.GetRoleIndex(), PC.GetSquadIndex(), PC.VehiclePoolIndex))
+    if (CanSpawnWithParameters(GRI, PC.GetTeamNum(), Pc.GetRoleIndex(), PC.GetSquadIndex(), PC.VehiclePoolIndex))
     {
         GetSpawnPosition(SpawnLocation, SpawnRotation, PC.VehiclePoolIndex);
 
@@ -181,6 +181,8 @@ function bool PerformSpawn(DHPlayer PC)
             // spawn infantry
         }
     }
+
+    return false;
 }
 
 // TODO: not sure what to do with this

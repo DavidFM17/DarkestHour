@@ -165,28 +165,28 @@ function bool SpawnPlayer(DHPlayer PC)
     return false;
 }
 
-function ROVehicle SpawnVehicle(DHPlayer C, vector SpawnLocation, rotator SpawnRotation)
+function ROVehicle SpawnVehicle(DHPlayer PC, vector SpawnLocation, rotator SpawnRotation)
 {
     local ROVehicle V;
     local int       i;
     local DHPlayerReplicationInfo PRI;
     local DHSpawnPointBase SP;
 
-    if (C == none || C.Pawn != none)
+    if (PC == none || PC.Pawn != none)
     {
         return none;
     }
 
-    PRI = DHPlayerReplicationInfo(C.PlayerReplicationInfo);
+    PRI = DHPlayerReplicationInfo(PC.PlayerReplicationInfo);
 
     // Make sure player isn't excluded from a tank crew role
-    if (VehiclePools[C.VehiclePoolIndex].VehicleClass.default.bMustBeTankCommander &&
+    if (VehiclePools[PC.VehiclePoolIndex].VehicleClass.default.bMustBeTankCommander &&
         (PRI == none || PRI.RoleInfo == none || !PRI.RoleInfo.bCanBeTankCrew))
     {
         return none;
     }
 
-    if (!CanSpawnVehicle(C.SpawnPointIndex, C.VehiclePoolIndex))
+    if (!CanSpawnVehicle(PC.SpawnPointIndex, PC.VehiclePoolIndex))
     {
         return none;
     }
@@ -194,16 +194,16 @@ function ROVehicle SpawnVehicle(DHPlayer C, vector SpawnLocation, rotator SpawnR
     // This calls old RestartPlayer (spawns player in black room) & avoids reinforcement subtraction (because we will subtract later)
     if (DarkestHourGame(Level.Game) != none)
     {
-        DarkestHourGame(Level.Game).DeployRestartPlayer(C, false, true);
+        DarkestHourGame(Level.Game).DeployRestartPlayer(PC, false, true);
     }
 
-    if (C.Pawn == none)
+    if (PC.Pawn == none)
     {
         return none;
     }
 
     // Now spawn the vehicle (& make sure it was successful)
-    V = Spawn(VehiclePools[C.VehiclePoolIndex].VehicleClass, self,, SpawnLocation, SpawnRotation);
+    V = Spawn(VehiclePools[PC.VehiclePoolIndex].VehicleClass, self,, SpawnLocation, SpawnRotation);
 
     if (V == none)
     {
@@ -211,7 +211,7 @@ function ROVehicle SpawnVehicle(DHPlayer C, vector SpawnLocation, rotator SpawnR
     }
 
     // If we successfully enter the vehicle
-    if (V.TryToDrive(C.Pawn))
+    if (V.TryToDrive(PC.Pawn))
     {
         // Set vehicle properties & add to our Vehicles array
         V.SetTeamNum(V.default.VehicleTeam);
@@ -221,44 +221,44 @@ function ROVehicle SpawnVehicle(DHPlayer C, vector SpawnLocation, rotator SpawnR
         // Start engine
         if (V.IsA('DHVehicle') && DHVehicle(V).bEngineOff)
         {
-            DHVehicle(V).bIsSpawnVehicle = VehiclePools[C.VehiclePoolIndex].bIsSpawnVehicle;
+            DHVehicle(V).bIsSpawnVehicle = VehiclePools[PC.VehiclePoolIndex].bIsSpawnVehicle;
             DHVehicle(V).ServerStartEngine();
         }
 
         // If it's a spawn vehicle that doesn't require the engine to be off, add to GRI's SpawnVehicles array
-        if (VehiclePools[C.VehiclePoolIndex].bIsSpawnVehicle)
+        if (VehiclePools[PC.VehiclePoolIndex].bIsSpawnVehicle)
         {
-            GRI.AddSpawnVehicle(C.VehiclePoolIndex, V);
+            GRI.AddSpawnVehicle(PC.VehiclePoolIndex, V);
         }
 
         // Increment vehicle counts
         ++TeamVehicleCounts[V.default.VehicleTeam];
 
-        if (!VehiclePools[C.VehiclePoolIndex].bIgnoreMaxTeamVehicles)
+        if (!VehiclePools[PC.VehiclePoolIndex].bIgnoreMaxTeamVehicles)
         {
             --GRI.MaxTeamVehicles[V.default.VehicleTeam];
         }
 
-        ++GRI.VehiclePoolActiveCounts[C.VehiclePoolIndex];
-        ++GRI.VehiclePoolSpawnCounts[C.VehiclePoolIndex];
+        ++GRI.VehiclePoolActiveCounts[PC.VehiclePoolIndex];
+        ++GRI.VehiclePoolSpawnCounts[PC.VehiclePoolIndex];
 
         // Assign newly spawned vehicle to a VehiclePools slot so we can track its respawn time, & set controller's NextVehicleSpawnTime
-        for (i = 0; i < VehiclePools[C.VehiclePoolIndex].Slots.Length; ++i)
+        for (i = 0; i < VehiclePools[PC.VehiclePoolIndex].Slots.Length; ++i)
         {
-            if (VehiclePools[C.VehiclePoolIndex].Slots[i].Vehicle == none)
+            if (VehiclePools[PC.VehiclePoolIndex].Slots[i].Vehicle == none)
             {
-                VehiclePools[C.VehiclePoolIndex].Slots[i].Vehicle = V;
+                VehiclePools[PC.VehiclePoolIndex].Slots[i].Vehicle = V;
                 break;
             }
         }
 
         // TODO: remove magic number
-        C.NextVehicleSpawnTime = GRI.ElapsedTime + 60;
+        PC.NextVehicleSpawnTime = GRI.ElapsedTime + 60;
 
         // Trigger any OnVehicleSpawnedEvent
-        if (VehiclePools[C.VehiclePoolIndex].OnVehicleSpawnedEvent != '')
+        if (VehiclePools[PC.VehiclePoolIndex].OnVehicleSpawnedEvent != '')
         {
-            TriggerEvent(VehiclePools[C.VehiclePoolIndex].OnVehicleSpawnedEvent, self, none);
+            TriggerEvent(VehiclePools[PC.VehiclePoolIndex].OnVehicleSpawnedEvent, self, none);
         }
 
         // Set spawn protection variables for the vehicle
@@ -276,15 +276,15 @@ function ROVehicle SpawnVehicle(DHPlayer C, vector SpawnLocation, rotator SpawnR
         }
 
         // Decrement reservation count
-        GRI.UnreserveVehicle(C);
+        GRI.UnreserveVehicle(PC);
 
-        C.bSpawnPointInvalidated = true;
+        PC.bSpawnPointInvalidated = true;
     }
     // We were unable to enter the vehicle, so destroy it & kill the player, so they aren't stuck in the black room
     else
     {
         V.Destroy();
-        C.Pawn.Suicide();
+        PC.Pawn.Suicide();
 
         return none;
     }
@@ -307,16 +307,9 @@ function bool CanSpawnVehicle(int SpawnPointIndex, int VehiclePoolIndex)
         return false;
     }
 
-    VC = VehiclePools[VehiclePoolIndex].VehicleClass;
-
-    if (VC == none)
-    {
-        return false;
-    }
-
     SP = GRI.GetSpawnPoint(SpawnPointIndex);
 
-    if (SP == none || !SP.CanSpawnVehicle(VC))
+    if (SP == none || !SP.CanSpawnVehicle(VehiclePoolIndex))
     {
         return false;
     }

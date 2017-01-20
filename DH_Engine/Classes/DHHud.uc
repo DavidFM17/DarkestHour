@@ -542,7 +542,6 @@ simulated function DrawHudPassC(Canvas C)
     local color                 MyColor;
     local AbsoluteCoordsInfo    Coords;
     local ROWeapon              MyWeapon;
-    local byte                  BlockFlags;
     local vector                CameraLocation;
     local rotator               CameraRotation;
     local Actor                 ViewActor;
