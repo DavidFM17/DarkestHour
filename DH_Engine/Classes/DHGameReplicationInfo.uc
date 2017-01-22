@@ -127,7 +127,8 @@ replication
         bUseDeathPenaltyCount,
         CurrentGameType,
         CurrentAlliedToAxisRatio,
-        TeamVehicleCounts;
+        TeamVehicleCounts,
+        SpawnPoints;
 
     reliable if (bNetInitial && (Role == ROLE_Authority))
         AlliedNationID, AlliesVictoryMusicIndex, AxisVictoryMusicIndex;

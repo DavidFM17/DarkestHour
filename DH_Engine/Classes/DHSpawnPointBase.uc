@@ -22,10 +22,6 @@ var int TeamIndex;
 var ESpawnPointBlockReason BlockReason;
 var private bool bIsActive;
 
-// These are used for the drawing on the deploy menu.
-var string StyleName;
-var string BlockedStyleName;
-
 var protected DHGameReplicationInfo GRI;
 
 // The amount of time, in seconds, that a player will be invulnerable after
@@ -55,7 +51,7 @@ simulated event PostBeginPlay()
 
 function bool PerformSpawn(DHPlayer PC);
 
-simulated function bool CanSpawnVehicle(int VehiclePoolIndex);
+simulated function bool CanSpawnVehicle(DHGameReplicationInfo GRI, int VehiclePoolIndex);
 
 simulated function bool CanSpawnRole(DHRoleInfo RI)
 {
@@ -91,7 +87,7 @@ simulated function bool IsBlocked()
 // spawn point.
 simulated function bool CanSpawnWithParameters(DHGameReplicationInfo GRI, int TeamIndex, int RoleIndex, int SquadIndex, int VehiclePoolIndex)
 {
-    if (self.TeamIndex != TeamIndex || !bIsActive || IsBlocked())
+    if (GRI == none || self.TeamIndex != TeamIndex || !bIsActive || IsBlocked())
     {
         return false;
     }
@@ -101,7 +97,7 @@ simulated function bool CanSpawnWithParameters(DHGameReplicationInfo GRI, int Te
         return false;
     }
 
-    if (VehiclePoolIndex >= 0 && !CanSpawnVehicle(VehiclePoolIndex))
+    if (VehiclePoolIndex >= 0 && !CanSpawnVehicle(GRI, VehiclePoolIndex))
     {
         return false;
     }
@@ -155,11 +151,9 @@ defaultproperties
 {
     TeamIndex=-1
     SpawnProtectionTime=2.5
-    SpawnKillProtectionTime=5
+    SpawnKillProtectionTime=5.0
     bAlwaysRelevant=true
     RemoteRole=ROLE_SimulatedProxy
-    bIsActive=true
-    StyleName=""
-    BlockedStyleName=""
+    bIsActive=false
 }
 

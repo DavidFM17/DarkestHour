@@ -13,12 +13,6 @@ const SPAWN_VEHICLES_BLOCK_RADIUS = 2048.0;
 
 var DHVehicle Vehicle;
 
-replication
-{
-    reliable if (Role == ROLE_Authority)
-        Vehicle;
-}
-
 function PostBeginPlay()
 {
     super.PostBeginPlay();
@@ -78,9 +72,12 @@ simulated function bool CanSpawnWithParameters(DHGameReplicationInfo GRI, int Te
         return false;
     }
 
-    if (Vehicle == none || Vehicle.default.VehicleTeam != TeamIndex)
+    if (Role == ROLE_Authority)
     {
-        return false;
+        if (Vehicle == none || Vehicle.default.VehicleTeam != TeamIndex)
+        {
+            return false;
+        }
     }
 
     return true;

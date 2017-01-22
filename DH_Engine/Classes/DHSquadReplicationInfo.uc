@@ -55,6 +55,7 @@ var private string                  AxisNames[TEAM_SQUADS_MAX];
 var private byte                    AxisLocked[TEAM_SQUADS_MAX];
 var private ESquadOrderType         AxisOrderTypes[TEAM_SQUADS_MAX];
 var private vector                  AxisOrderLocations[TEAM_SQUADS_MAX];
+var private int                     AxisRallyPointTimes[TEAM_SQUADS_MAX];
 
 var DHSpawnPoint_SquadRallyPoint    RallyPoints[16];
 
@@ -63,6 +64,7 @@ var private string                  AlliesNames[TEAM_SQUADS_MAX];
 var private byte                    AlliesLocked[TEAM_SQUADS_MAX];
 var private ESquadOrderType         AlliesOrderTypes[TEAM_SQUADS_MAX];
 var private vector                  AlliesOrderLocations[TEAM_SQUADS_MAX];
+var private int                     AlliesRallyPointTimes[TEAM_SQUADS_MAX];
 
 var private array<string>           AlliesDefaultSquadNames;
 var private array<string>           AxisDefaultSquadNames;
@@ -83,8 +85,7 @@ replication
         AxisMembers, AxisNames, AxisLocked,
         AlliesMembers, AlliesNames, AlliesLocked,
         AxisOrderTypes, AxisOrderLocations,
-        AlliesOrderTypes, AlliesOrderLocations,
-        RallyPoints;
+        AlliesOrderTypes, AlliesOrderLocations;
 }
 
 function PostBeginPlay()
@@ -495,6 +496,8 @@ function bool LeaveSquad(DHPlayerReplicationInfo PRI)
 
     if (!IsSquadActive(TeamIndex, PRI.SquadIndex))
     {
+        Level.Game.Broadcast(self, "SQUAD IS NOW INACTIVE!!!");
+
         // Squad is now empty, so clear the orders so that if the squad becomes
         // active again, there aren't leftover orders sitting around.
         InternalSetSquadOrder(TeamIndex, PRI.SquadIndex, ORDER_None, vect(0, 0, 0));
@@ -502,9 +505,12 @@ function bool LeaveSquad(DHPlayerReplicationInfo PRI)
         // Destroy all rally points.
         for (i = 0; i < arraycount(RallyPoints); ++i)
         {
-            if (RallyPoints[i].TeamIndex == TeamIndex &&
+            if (RallyPoints[i] != none &&
+                RallyPoints[i].TeamIndex == TeamIndex &&
                 RallyPoints[i].SquadIndex == PRI.SquadIndex)
             {
+                Level.Game.Broadcast(self, "DELETING RALLY POINT" @ i);
+
                 RallyPoints[i].Destroy();
             }
         }
@@ -1180,28 +1186,30 @@ function DHSpawnPoint_SquadRallyPoint GetRallyPoint(int TeamIndex, int SquadInde
 
 const RALLY_POINT_RADIUS_IN_METERS = 100;
 
-function bool CanCreateRallyPoint(DHPlayer PC)
+function DHSpawnPoint_SquadRallyPoint SpawnRallyPoint(DHPlayer PC)
 {
-    // TODO: can't have placed a rally point recently (say, 90-120 seconds?)
-    // TODO: can't have recently exited a vehicle
-    // TODO: can't be inside a minefield
-    // TODO: can't be inside an objective?? (maybe)
+    local DHSpawnPoint_SquadRallyPoint RP;
     local Pawn OtherPawn;
     local DHPawn P;
     local DHPlayerReplicationInfo PRI, OtherPRI;
+    local vector HitLocation, HitNormal, V;
+    local int i, RallyPointIndex;
     local bool bIsNearSquadmate;
-    local int i;
+    local rotator R;
 
     if (PC == none)
     {
-        return false;
+        return none;
     }
 
     P = DHPawn(PC.Pawn);
 
+    // Must be on foot as an infantryman
     if (P == none)
     {
-        return false;
+        // TODO: send a message "You must be on foot to create a rally point."
+
+        return none;
     }
 
     PRI = DHPlayerReplicationInfo(PC.PlayerReplicationInfo);
@@ -1209,80 +1217,60 @@ function bool CanCreateRallyPoint(DHPlayer PC)
     // Must be a squad leader
     if (PRI == none || !PRI.IsSquadLeader())
     {
-        return false;
+        return none;
     }
 
-    // TODO: cannot be too close to another rally point
-
+    // Cannot be too close to another rally point.
     for (i = 0; i < arraycount(RallyPoints); ++i)
     {
         if (RallyPoints[i] != none &&
             RallyPoints[i].TeamIndex == PC.GetTeamNum() &&
             RallyPoints[i].SquadIndex == PC.GetSquadIndex())
         {
-            if (VSize(RallyPoints[i].Location - PC.Location) < RALLY_POINT_RADIUS_IN_METERS)
+            if (VSize(RallyPoints[i].Location - P.Location) < class'DHUnits'.static.MetersToUnreal(RALLY_POINT_RADIUS_IN_METERS))
             {
-                return false;
+                // TODO: send a message "You cannot create a rally point within 100 meters of your squad's other rally points."
+                PC.ReceiveLocalizedMessage(SquadMessageClass, 45,,, class'UInteger'.static.Create(RALLY_POINT_RADIUS_IN_METERS));
+                return none;
             }
         }
     }
-    // TODO: when squad disbands, destroy all rally points
 
     if (Level.NetMode != NM_Standalone)
     {
         // Must have a teammate nearby
         foreach P.RadiusActors(class'Pawn', OtherPawn, class'DHUnits'.static.MetersToUnreal(10))
         {
-            if (OtherPawn == none)
+            if (OtherPawn != none && !OtherPawn.bDeleteMe && OtherPawn.Health > 0)
             {
-                continue;
-            }
+                OtherPRI = DHPlayerReplicationInfo(OtherPawn.PlayerReplicationInfo);
 
-            OtherPRI = DHPlayerReplicationInfo(OtherPawn.PlayerReplicationInfo);
-
-            if (class'DHPlayerReplicationInfo'.static.IsInSameSquad(PRI, OtherPRI))
-            {
-                bIsNearSquadmate = true;
+                if (class'DHPlayerReplicationInfo'.static.IsInSameSquad(PRI, OtherPRI))
+                {
+                    bIsNearSquadmate = true;
+                }
             }
         }
 
         if (!bIsNearSquadmate)
         {
-            return false;
+            // "You must have at least one other squadmate nearby to establish a rally point."
+            PC.ReceiveLocalizedMessage(SquadMessageClass, 47);
+
+            return none;
         }
     }
 
-    return true;
-}
-
-function DHSpawnPoint_SquadRallyPoint SpawnRallyPoint(DHPlayer PC)
-{
-    local DHSpawnPoint_SquadRallyPoint RP;
-    local Pawn P;
-    local DHPlayerReplicationInfo PRI;
-    local vector HitLocation, HitNormal;
-    local int i, RallyPointIndex;
-
-    if (!CanCreateRallyPoint(PC))
-    {
-        // TODO: return an error somewhere
-        return none;
-    }
-
-    P = PC.Pawn;
-
-    if (P == none)
-    {
-        return none;
-    }
-
-    PRI = DHPlayerReplicationInfo(P.PlayerReplicationInfo);
-
     if (P.Trace(HitLocation, HitNormal, P.Location - vect(0, 0, 128.0), P.Location, false) == none)
     {
-        Log("Trace down hit nothing");
-
         return none;
+    }
+
+    // Make sure that we are on relatively flat ground
+    if (Acos(HitNormal dot vect(0.0, 0.0, 1.0)) > class'UUnits'.static.DegreesToRadians(35))
+    {
+        // TODO: send a message that the ground is too steep
+        PC.ReceiveLocalizedMessage(SquadMessageClass, 49);
     }
 
     for (i = 0; i < arraycount(RallyPoints); ++i)
@@ -1296,23 +1284,34 @@ function DHSpawnPoint_SquadRallyPoint SpawnRallyPoint(DHPlayer PC)
 
     if (RallyPointIndex < 0)
     {
-        Warn("Too many active rally points, cannot create another one");
+        Warn("Too many rally points!");
 
         return none;
     }
 
-    // TODO: snap and align to the ground, make sure it's on relatively flat ground etc.
-    RP = Spawn(class'DHSpawnPoint_SquadRallyPoint', none,, HitLocation, PC.Pawn.Rotation);
+    // Align to the ground
+    R = P.Rotation;
+    R.Pitch = 0;
+    R.Roll = 0;
+
+    V = HitNormal cross vector(R);
+    V = V cross HitNormal;
+
+    R = rotator(V);
+
+    RP = Spawn(class'DHSpawnPoint_SquadRallyPoint', none,, HitLocation, R);
 
     if (RP != none)
     {
         RP.TeamIndex = P.GetTeamNum();
         RP.SquadIndex = PRI.SquadIndex;
         RP.RallyPointIndex = RallyPointIndex;
-        RP.ActivationTime = Level.Game.GameReplicationInfo.ElapsedTime + 15;    // TODO: this time will probably end up being dynamic
     }
 
     RallyPoints[RallyPointIndex] = RP;
+
+    // "A squad rally point will be established in {0} seconds."
+    PC.ReceiveLocalizedMessage(SquadMessageClass, 48,,, class'UInteger'.static.Create(RP.SecondsToEstablish));
 
     return RP;
 }
@@ -1337,5 +1336,5 @@ defaultproperties
     AxisDefaultSquadNames(5)="Fritz"
     AxisDefaultSquadNames(6)="Gustav"
     AxisDefaultSquadNames(7)="Heinrich"
-    SquadMessageClass=class'DHGameMessage'
+    SquadMessageClass=class'DHSquadMessage'
 }

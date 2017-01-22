@@ -4193,7 +4193,7 @@ function BroadcastSquad(Controller Sender, coerce string Msg, optional name Type
     }
 }
 
-function Pawn SpawnPawn(DHPlayer C, vector SpawnLocation, rotator SpawnRotation)
+function Pawn SpawnPawn(DHPlayer C, vector SpawnLocation, rotator SpawnRotation, DHSpawnPointBase SP)
 {
     if (C == none)
     {
@@ -4254,6 +4254,13 @@ function Pawn SpawnPawn(DHPlayer C, vector SpawnLocation, rotator SpawnRotation)
     C.PawnClass = C.Pawn.Class;
     C.Pawn.PlayTeleportEffect(true, true);
     C.ClientSetRotation(C.Pawn.Rotation);
+
+    // Set proper spawn kill protection times
+    if (DHPawn(C.Pawn) != none && SP != none)
+    {
+        DHPawn(C.Pawn).SpawnProtEnds = Level.TimeSeconds + SP.SpawnProtectionTime;
+        DHPawn(C.Pawn).SpawnKillTimeEnds = Level.TimeSeconds + SP.SpawnKillProtectionTime;
+    }
 
     AddDefaultInventory(C.Pawn);
 

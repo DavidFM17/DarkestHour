@@ -126,8 +126,20 @@ simulated function bool CanSpawnWithParameters(DHGameReplicationInfo GRI, int Te
     local class<ROVehicle>  VehicleClass;
     local DHRoleInfo        RI;
 
+    if (VehiclePoolIndex != -1)
+    {
+        Log("========================================");
+        Log("GRI" @ GRI);
+        Log("TeamIndex" @ TeamIndex);
+        Log("RoleIndex" @ RoleIndex);
+        Log("SquadIndex" @ SquadIndex);
+        Log("VehiclePoolIndex" @ VehiclePoolIndex);
+    }
+
     if (!super.CanSpawnWithParameters(GRI, TeamIndex, RoleIndex, SquadIndex, VehiclePoolIndex))
     {
+        Log("A");
+
         return false;
     }
 
@@ -136,11 +148,13 @@ simulated function bool CanSpawnWithParameters(DHGameReplicationInfo GRI, int Te
 
     if (RI == none)
     {
+        Log("B");
         return false;
     }
 
     if (RI.default.bCanUseMortars && CanSpawnMortars())
     {
+        Log("C");
         return true;
     }
 
@@ -150,11 +164,16 @@ simulated function bool CanSpawnWithParameters(DHGameReplicationInfo GRI, int Te
     }
     else
     {
-        return CanSpawnInfantryVehicles() || (RI.default.bCanBeTankCrew && CanSpawnVehicle(VehiclePoolIndex));
+        Log("D");
+        Log("CanSpawnInfantryVehicles" @ CanSpawnInfantryVehicles());
+        Log("RI.default.bCanBeTankCrew" @ RI.default.bCanBeTankCrew);
+        Log("CanSpawnVehicle(VehiclePoolIndex)" @ CanSpawnVehicle(GRI, VehiclePoolIndex));
+
+        return CanSpawnInfantryVehicles() || (RI.default.bCanBeTankCrew && CanSpawnVehicle(GRI, VehiclePoolIndex));
     }
 }
 
-simulated function bool CanSpawnVehicle(int VehiclePoolIndex)
+simulated function bool CanSpawnVehicle(DHGameReplicationInfo GRI, int VehiclePoolIndex)
 {
     local class<ROVehicle> VehicleClass;
 
@@ -185,7 +204,7 @@ function bool PerformSpawn(DHPlayer PC)
         else
         {
             // spawn infantry
-            return G.SpawnPawn(PC, SpawnLocation, SpawnRotation) != none;
+            return G.SpawnPawn(PC, SpawnLocation, SpawnRotation, self) != none;
         }
     }
 
@@ -298,7 +317,6 @@ defaultproperties
     bStatic=true
     RemoteRole=ROLE_SimulatedProxy
     DrawScale=1.5
-    SpawnProtectionTime=8.0
     bCollideWhenPlacing=true
     CollisionRadius=+00040.0
     CollisionHeight=+00043.0

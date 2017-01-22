@@ -11,8 +11,9 @@ var int SquadIndex;
 var int RallyPointIndex;
 var int SpawnsRemaining;
 var int SpawnKillCount;
-var int ActivationTime;
 var sound CreationSound;
+
+var int SecondsToEstablish;
 
 // TODO: don't allow placement of the rally point under water, minefield etc.
 
@@ -36,7 +37,7 @@ function PostBeginPlay()
         }
 
         // TODO: figure out how far away this can be heard from
-        PlaySound(CreationSound, SLOT_None, 1.0,, 60.0,, true);
+        PlaySound(CreationSound, SLOT_None, 2.0,, 60.0,, true);
 
         SetTimer(1.0, true);
     }
@@ -45,7 +46,7 @@ function PostBeginPlay()
 auto state Constructing
 {
 Begin:
-    Sleep(default.ActivationTime);  // TODO: replace magic number
+    Sleep(default.SecondsToEstablish);
     GotoState('Active');
 }
 
@@ -72,18 +73,12 @@ state Active
         {
             // "The squad has established a new rally point."
             SRI.BroadcastSquadLocalizedMessage(TeamIndex, SquadIndex, SRI.SquadMessageClass, 44);
+            SetIsActive(true);
         }
     }
-Begin:
-    SetIsActive(true);
 }
 
-simulated function bool IsBlocked()
-{
-    return IsInState('Constructing');
-}
-
-function bool CanSpawnWithParameters(DHGameReplicationInfo GRI, int TeamIndex, int RoleIndex, int SquadIndex, int VehiclePoolIndex)
+simulated function bool CanSpawnWithParameters(DHGameReplicationInfo GRI, int TeamIndex, int RoleIndex, int SquadIndex, int VehiclePoolIndex)
 {
     if (!super.CanSpawnWithParameters(GRI, TeamIndex, RoleIndex, SquadIndex, VehiclePoolIndex))
     {
@@ -110,7 +105,7 @@ function bool HasEnemiesNearby()
     // TODO: remove magic number
     foreach RadiusActors(class'Pawn', P, class'DHUnits'.static.MetersToUnreal(25))
     {
-        if (P == none)
+        if (P == none || P.bDeleteMe || P.Health <= 0)
         {
             continue;
         }
@@ -139,7 +134,24 @@ function GetSpawnPosition(out vector SpawnLocation, out rotator SpawnRotation, i
         SpawnLocation.Z += class'DHPawn'.default.CollisionHeight / 2;
     }
 
-    SpawnRotation = SpawnRotation;
+    SpawnRotation = Rotation;
+}
+
+// Returns true if the spawn point is "visible" to a player with the arguments
+// provided.
+simulated function bool IsVisibleTo(int TeamIndex, int RoleIndex, int SquadIndex, int VehiclePoolIndex)
+{
+    if (!super.IsVisibleTo(TeamIndex, RoleIndex, SquadIndex, VehiclePoolIndex))
+    {
+        return false;
+    }
+
+    if (self.SquadIndex != SquadIndex)
+    {
+        return false;
+    }
+
+    return true;
 }
 
 function bool PerformSpawn(DHPlayer PC)
@@ -159,7 +171,7 @@ function bool PerformSpawn(DHPlayer PC)
     {
         GetSpawnPosition(SpawnLocation, SpawnRotation, PC.VehiclePoolIndex);
 
-        if (G.SpawnPawn(PC, SpawnLocation, SpawnRotation) == none)
+        if (G.SpawnPawn(PC, SpawnLocation, SpawnRotation, self) == none)
         {
             return false;
         }
@@ -190,6 +202,6 @@ defaultproperties
     SpawnsRemaining=9
     SpawnKillCount=0
     CreationSound=Sound'Inf_Player.Gibimpact.Gibimpact'
-    ActivationTime=30
+    SecondsToEstablish=30
 }
 
