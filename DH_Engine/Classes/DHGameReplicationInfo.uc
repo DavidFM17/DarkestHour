@@ -77,14 +77,11 @@ var byte                VehiclePoolReservationCount[VEHICLE_POOLS_MAX];
 var int                 VehiclePoolIgnoreMaxTeamVehiclesFlags;
 
 var byte                MaxTeamVehicles[2];
+var byte                TeamVehicleCounts[2];
 
 const SPAWN_POINTS_MAX = 63;
 
 var DHSpawnPointBase   SpawnPoints[SPAWN_POINTS_MAX];
-
-const SPAWN_VEHICLES_MAX = 8;
-
-var SpawnVehicle        SpawnVehicles[SPAWN_VEHICLES_MAX];
 
 const OBJECTIVES_MAX = 32;
 
@@ -124,13 +121,13 @@ replication
         VehiclePoolIsSpawnVehicles,
         VehiclePoolReservationCount,
         VehiclePoolIgnoreMaxTeamVehiclesFlags,
-        SpawnVehicles,
         MaxTeamVehicles,
         DHObjectives,
         AttritionRate,
         bUseDeathPenaltyCount,
         CurrentGameType,
-        CurrentAlliedToAxisRatio;
+        CurrentAlliedToAxisRatio,
+        TeamVehicleCounts;
 
     reliable if (bNetInitial && (Role == ROLE_Authority))
         AlliedNationID, AlliesVictoryMusicIndex, AxisVictoryMusicIndex;
@@ -257,6 +254,46 @@ simulated function bool CanSpawnWithParameters(int SpawnPointIndex, int TeamInde
     }
 
     return SP.CanSpawnWithParameters(self, TeamIndex, RoleIndex, SquadIndex, VehiclePoolIndex);
+}
+
+simulated function bool CanSpawnVehicle(int VehiclePoolIndex)
+{
+    local class<ROVehicle> VC;
+
+    if (VehiclePoolIndex < 0 || VehiclePoolIndex >= VEHICLE_POOLS_MAX)
+    {
+        return false;
+    }
+
+    VC = VehiclePoolVehicleClasses[VehiclePoolIndex];
+
+    if (!IgnoresMaxTeamVehiclesFlags(VehiclePoolIndex) &&
+        TeamVehicleCounts[VC.default.VehicleTeam] >= MaxTeamVehicles[VC.default.VehicleTeam])
+    {
+        return false;
+    }
+
+    if (!IsVehiclePoolActive(VehiclePoolIndex))
+    {
+        return false;
+    }
+
+    if (ElapsedTime < VehiclePoolNextAvailableTimes[VehiclePoolIndex])
+    {
+        return false;
+    }
+
+    if (VehiclePoolSpawnCounts[VehiclePoolIndex] >= VehiclePoolMaxSpawns[VehiclePoolIndex])
+    {
+        return false;
+    }
+
+    if (VehiclePoolActiveCounts[VehiclePoolIndex] >= VehiclePoolMaxActives[VehiclePoolIndex])
+    {
+        return false;
+    }
+
+    return true;
 }
 
 //------------------------------------------------------------------------------
@@ -420,74 +457,6 @@ function UnreserveVehicle(DHPlayer PC)
     PC.VehiclePoolIndex = -1;
 }
 
-//------------------------------------------------------------------------------
-// Spawn Vehicle Functions
-//------------------------------------------------------------------------------
-
-function int AddSpawnVehicle(int VehiclePoolIndex, Vehicle V)
-{
-    local int i;
-
-    // Ensure this vehicle doesn't yet exist in the array
-    for (i = 0; i < arraycount(SpawnVehicles); ++i)
-    {
-        if (SpawnVehicles[i].Vehicle == V)
-        {
-            // Vehicle already exists in the array
-            return i;
-        }
-    }
-
-    // Find an empty place to put the vehicle in the array
-    for (i = 0; i < arraycount(SpawnVehicles); ++i)
-    {
-        if (SpawnVehicles[i].Vehicle == none)
-        {
-            SpawnVehicles[i].VehiclePoolIndex = VehiclePoolIndex;
-            SpawnVehicles[i].Vehicle = V;
-
-            // Vehicle was successfully added
-            return i;
-        }
-    }
-
-    Warn("Spawn vehicle (" $ V.Class $ ") could not be initialized.");
-
-    // No empty spaces, cannot add to SpawnVehicles
-    return -1;
-}
-
-function bool RemoveSpawnVehicle(Vehicle V)
-{
-    local int i;
-    local Controller C;
-    local DHPlayer PC;
-
-    for (i = 0; i < arraycount(SpawnVehicles); ++i)
-    {
-        if (SpawnVehicles[i].Vehicle == V)
-        {
-            SpawnVehicles[i].VehiclePoolIndex = -1;
-            SpawnVehicles[i].Vehicle = none;
-
-            for (C = Level.ControllerList; C != none; C = C.NextController)
-            {
-                PC = DHPlayer(C);
-
-                if (PC != none && PC.SpawnPointIndex == SpawnVehicles[i].SpawnPointIndex)
-                {
-                    PC.SpawnPointIndex = -1;
-                    PC.bSpawnPointInvalidated = true;
-                }
-            }
-
-            return true;
-        }
-    }
-
-    return false;
-}
-
 // Finds the matching VehicleClass but also check the bIsSpawnVehicle setting also matches
 // Vital as same VehicleClass may well be in the vehicles list twice, with one being a spawn vehicle & the other the ordinary version, e.g. a half-track & a spawn vehicle HT
 simulated function byte GetVehiclePoolIndex(Vehicle V)
@@ -498,7 +467,7 @@ simulated function byte GetVehiclePoolIndex(Vehicle V)
     {
         for (i = 0; i < arraycount(VehiclePoolVehicleClasses); ++i)
         {
-            if (V.Class == VehiclePoolVehicleClasses[i] && !(DHVehicle(V) != none && DHVehicle(V).bIsSpawnVehicle != bool(VehiclePoolIsSpawnVehicles[i])))
+            if (V.Class == VehiclePoolVehicleClasses[i] && !(DHVehicle(V) != none && DHVehicle(V).IsSpawnVehicle() != bool(VehiclePoolIsSpawnVehicles[i])))
             {
                 return i;
             }

@@ -12,6 +12,9 @@ var int RallyPointIndex;
 var int SpawnsRemaining;
 var int SpawnKillCount;
 var int ActivationTime;
+var sound CreationSound;
+
+// TODO: don't allow placement of the rally point under water, minefield etc.
 
 replication
 {
@@ -19,24 +22,60 @@ replication
         SquadIndex, RallyPointIndex, SpawnsRemaining;
 }
 
+function PostBeginPlay()
+{
+    super.PostBeginPlay();
+
+    if (Role == ROLE_Authority)
+    {
+        SRI = DarkestHourGame(Level.Game).SquadReplicationInfo;
+
+        if (SRI == none)
+        {
+            Destroy();
+        }
+
+        // TODO: figure out how far away this can be heard from
+        PlaySound(CreationSound, SLOT_None, 1.0,, 60.0,, true);
+
+        SetTimer(1.0, true);
+    }
+}
+
 auto state Constructing
 {
 Begin:
-    Sleep(15);
+    Sleep(default.ActivationTime);  // TODO: replace magic number
     GotoState('Active');
 }
 
-simulated state Active
+state Active
 {
+    function Timer()
+    {
+        // TODO: find out if there are enemies nearby; if enemies are nearby for
+        // long enough (consistently within ~25m for 15 seconds straight, kill the
+        // rally point).
+        // TODO: destroy immediately if enemies are within a ~10m radius and are
+        // within eyeshot
+        // TODO: 3-strike rule for spawn kills on the rally point
+        // TODO: broadcast to squad if the rally point is overrun
+        if (HasEnemiesNearby())
+        {
+            Destroy();
+        }
+    }
+
     event BeginState()
     {
+        if (Role == ROLE_Authority)
+        {
+            // "The squad has established a new rally point."
+            SRI.BroadcastSquadLocalizedMessage(TeamIndex, SquadIndex, SRI.SquadMessageClass, 44);
+        }
     }
 Begin:
-}
-
-simulated function bool IsActive()
-{
-    return super.IsActive() && IsInState('Active');
+    SetIsActive(true);
 }
 
 simulated function bool IsBlocked()
@@ -58,43 +97,10 @@ function bool CanSpawnWithParameters(DHGameReplicationInfo GRI, int TeamIndex, i
 
     if (SpawnsRemaining == 1)
     {
-        // TODO: must be SL to use; where are we gonna get this from? a PRI?
+        // TODO: must be SL to use; where are we gonna get this from? a PRI??
     }
 
     return true;
-}
-
-function PostBeginPlay()
-{
-    super.PostBeginPlay();
-
-    if (Role == ROLE_Authority)
-    {
-        SRI = DarkestHourGame(Level.Game).SquadReplicationInfo;
-
-        if (SRI == none)
-        {
-            Destroy();
-        }
-
-        SetTimer(1.0, true);
-    }
-}
-
-function Timer()
-{
-    // TODO: find out if there are enemies nearby; if enemies are nearby for
-    // long enough (consistently within ~25m for 15 seconds straight, kill the
-    // rally point).
-    // TODO: destroy immediately if enemies are within a ~10m radius and are
-    // within eyeshot
-    // TODO: 3-strike rule for spawn kills on the rally point
-    if (HasEnemiesNearby())
-    {
-//    Destroy();
-    }
-
-    // TODO: find SRI?
 }
 
 function bool HasEnemiesNearby()
@@ -118,6 +124,24 @@ function bool HasEnemiesNearby()
     return false;
 }
 
+function GetSpawnPosition(out vector SpawnLocation, out rotator SpawnRotation, int VehiclePoolIndex)
+{
+    local vector HitLocation, HitNormal;
+
+    if (Trace(HitLocation, HitNormal, Location - vect(0, 0, 32), Location + vect(0, 0, 32)) != none)
+    {
+        SpawnLocation = HitLocation;
+        SpawnLocation.Z += class'DHPawn'.default.CollisionHeight / 2;
+    }
+    else
+    {
+        SpawnLocation = Location;
+        SpawnLocation.Z += class'DHPawn'.default.CollisionHeight / 2;
+    }
+
+    SpawnRotation = SpawnRotation;
+}
+
 function bool PerformSpawn(DHPlayer PC)
 {
     local DarkestHourGame G;
@@ -131,24 +155,29 @@ function bool PerformSpawn(DHPlayer PC)
         return false;
     }
 
-    if (CanSpawnWithParameters(GRI, PC.GetTeamNum(), PC.GetRoleIndex(), PC.GetSquadIndex(), PC.VehiclePoolIndex) &&
-        G.SpawnPawn(PC, SpawnLocation, SpawnRotation) != none)
+    if (CanSpawnWithParameters(GRI, PC.GetTeamNum(), PC.GetRoleIndex(), PC.GetSquadIndex(), PC.VehiclePoolIndex))
     {
         GetSpawnPosition(SpawnLocation, SpawnRotation, PC.VehiclePoolIndex);
+
+        if (G.SpawnPawn(PC, SpawnLocation, SpawnRotation) == none)
+        {
+            return false;
+        }
+
+        SpawnsRemaining -= 1;
+
+        if (SpawnsRemaining <= 0)
+        {
+            // "A squad rally point has been exhausted."
+            SRI.BroadcastSquadLocalizedMessage(TeamIndex, SquadIndex, SRI.SquadMessageClass, 46);
+
+            Destroy();
+        }
+
         return true;
     }
 
     return false;
-}
-
-function OnSpawn()
-{
-    SpawnsRemaining -= 1;
-
-    if (SpawnsRemaining <= 0)
-    {
-        Destroy();  // TODO: invalidate people's spawn points
-    }
 }
 
 defaultproperties
@@ -158,8 +187,9 @@ defaultproperties
     TeamIndex=-1
     SquadIndex=-1
     RallyPointIndex=-1
-    SpawnsRemaining=15
+    SpawnsRemaining=9
     SpawnKillCount=0
-    AmbientSound=Sound'Inf_Player.Gibimpact.Gibimpact'
+    CreationSound=Sound'Inf_Player.Gibimpact.Gibimpact'
+    ActivationTime=30
 }
 

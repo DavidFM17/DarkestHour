@@ -126,8 +126,7 @@ var     name                      ResupplyAttachBone;      // bone name for atta
 var     Actor                     ResupplyAttachment;      // reference to any resupply actor
 
 // Spawning
-var     bool                    bIsSpawnVehicle;
-var     DHSpawnPoint_Vehicle    SpawnPoint;
+var     DHSpawnPoint_Vehicle    SpawnPointAttachment;
 
 // Debugging
 var     bool        bDebuggingText;
@@ -137,7 +136,7 @@ replication
 {
     // Variables the server will replicate to all clients
     reliable if (bNetDirty && Role == ROLE_Authority)
-        bEngineOff, bIsSpawnVehicle, bRightTrackDamaged, bLeftTrackDamaged, SpawnPoint;
+        bEngineOff, bRightTrackDamaged, bLeftTrackDamaged, SpawnPointAttachment;
 
     // Variables the server will replicate to clients when this actor is 1st replicated
     reliable if (bNetInitial && bNetDirty && Role == ROLE_Authority)
@@ -183,16 +182,6 @@ simulated function PostBeginPlay()
             Index = StartIndex + i;
             PassengerWeapons[Index].WeaponPawnClass = class'DHPassengerPawn'.default.PassengerClasses[Index];
             PassengerWeapons[Index].WeaponBone = PassengerPawns[i].AttachBone;
-        }
-
-        if (bIsSpawnVehicle)
-        {
-            SpawnPoint = Spawn(class'DHSpawnPoint_Vehicle', self, , Location, Rotation);
-
-            if (SpawnPoint != none)
-            {
-                // TODO: explicity ATTACH the spawn point to the vehicle?
-            }
         }
     }
 
@@ -268,6 +257,14 @@ simulated function Destroyed()
     super.Destroyed();
 
     DestroyAttachments();
+
+    if (Role == ROLE_Authority)
+    {
+        if (SpawnPointAttachment != none)
+        {
+            SpawnPointAttachment.Destroy();
+        }
+    }
 }
 
 // Modified to score the vehicle kill
@@ -851,7 +848,7 @@ simulated function ClientKDriverEnter(PlayerController PC)
     {
         P.QueueHint(40, true);
 
-        if (bIsSpawnVehicle)
+        if (IsSpawnVehicle())
         {
             P.QueueHint(14, true);
             P.QueueHint(16, true);
@@ -2481,6 +2478,11 @@ simulated function DestroyAttachments()
         ResupplyAttachment.Destroy();
     }
 
+    if (Role == ROLE_Authority)
+    {
+
+    }
+
     for (i = 0; i < VehicleAttachments.Length; ++i)
     {
         if (VehicleAttachments[i].Actor != none)
@@ -2594,7 +2596,7 @@ function MaybeDestroyVehicle()
     local bool bDeactivatedFactoryWantsToDestroy;
 
     // Do nothing if vehicle is a spawn vehicle, or isn't empty, or is factory's last vehicle (no point destroying vehicle if factory won't spawn replacement)
-    if (bIsSpawnVehicle || !IsVehicleEmpty() || IsFactorysLastVehicle())
+    if (IsSpawnVehicle() || !IsVehicleEmpty() || IsFactorysLastVehicle())
     {
         return;
     }
@@ -2650,7 +2652,7 @@ event CheckReset()
     // Do nothing if vehicle is a spawn vehicle, or isn't empty, or is its factory's last vehicle (no point destroying vehicle if factory won't spawn replacement)
     // Originally this set a new timer if vehicle was found to be occupied, but there's no reason for that
     // Occupied vehicle shouldn't have CheckReset timer running & if player exits, leaving vehicle empty, then a new CheckReset timer gets started
-    if (bIsSpawnVehicle || !IsVehicleEmpty() || IsFactorysLastVehicle())
+    if (IsSpawnVehicle() || !IsVehicleEmpty() || IsFactorysLastVehicle())
     {
         return;
     }
@@ -3009,6 +3011,11 @@ exec function SetRumbleVol(float NewValue)
 {
     Log(VehicleNameString @ "RumbleSoundVolumeModifier =" @ NewValue @ "(was" @ RumbleSoundVolumeModifier $ ")");
     RumbleSoundVolumeModifier = NewValue;
+}
+
+simulated function bool IsSpawnVehicle()
+{
+    return SpawnPointAttachment != none;
 }
 
 defaultproperties

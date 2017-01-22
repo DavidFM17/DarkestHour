@@ -446,18 +446,7 @@ function UpdateSpawnPoints()
                 p_Map.b_SpawnPoints[i].MenuStateChange(MSAT_Disabled);
             }
 
-            // TODO: make a universal blocked button style
-            // BLOCK status
-            if (GRI.SpawnPoints[i].IsBlocked())
-            {
-                p_Map.b_SpawnPoints[i].StyleName = "DHSpawnVehicleBlockedButtonStyle";
-            }
-            else
-            {
-                p_Map.b_SpawnPoints[i].StyleName = "DHSpawnVehicleButtonStyle";
-            }
-
-            p_Map.b_SpawnPoints[i].Style = Controller.GetStyle(p_Map.b_SpawnPoints[i].StyleName, FS);
+            p_Map.b_SpawnPoints[i].Style = Controller.GetStyle(GRI.SpawnPoints[i].GetStyleName(), FS);
         }
         else
         {

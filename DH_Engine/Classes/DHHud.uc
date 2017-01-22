@@ -641,17 +641,17 @@ simulated function DrawHudPassC(Canvas C)
     V = DHVehicle(PawnOwner);
 
     // Spawn vehicle deploy icon
-    if (V != none && V.SpawnPoint != none)
+    if (V != none && V.SpawnPointAttachment != none)
     {
-        if (V.SpawnPoint.BlockReason == SPBR_None)
+        if (V.SpawnPointAttachment.BlockReason == SPBR_None)
         {
             DrawSpriteWidget(C, DeployOkayIcon);
         }
-        else if (V.SpawnPoint.BlockReason == SPBR_InObjective)
+        else if (V.SpawnPointAttachment.BlockReason == SPBR_InObjective)
         {
             DrawSpriteWidget(C, DeployInObjectiveIcon);
         }
-        else if (V.SpawnPoint.BlockReason == SPBR_EnemiesNearby)
+        else if (V.SpawnPointAttachment.BlockReason == SPBR_EnemiesNearby)
         {
             DrawSpriteWidget(C, DeployEnemiesNearbyIcon);
         }

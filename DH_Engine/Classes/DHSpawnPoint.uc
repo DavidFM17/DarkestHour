@@ -144,12 +144,14 @@ simulated function bool CanSpawnWithParameters(DHGameReplicationInfo GRI, int Te
         return true;
     }
 
-    if (VehicleClass != none)
+    if (VehicleClass == none)
     {
         return CanSpawnInfantry() || (RI.default.bCanBeTankCrew && CanSpawnVehicles());
     }
-
-    return true;
+    else
+    {
+        return CanSpawnInfantryVehicles() || (RI.default.bCanBeTankCrew && CanSpawnVehicle(VehiclePoolIndex));
+    }
 }
 
 simulated function bool CanSpawnVehicle(int VehiclePoolIndex)
@@ -160,13 +162,17 @@ simulated function bool CanSpawnVehicle(int VehiclePoolIndex)
 
     return VehicleClass != none &&
            TeamIndex == VehicleClass.default.VehicleTeam &&
-           (CanSpawnVehicles() || (!VehicleClass.default.bMustBeTankCommander && CanSpawnInfantryVehicles()));
+           (CanSpawnVehicles() || (!VehicleClass.default.bMustBeTankCommander && CanSpawnInfantryVehicles())) &&
+           GRI.CanSpawnVehicle(VehiclePoolIndex);
 }
 
 function bool PerformSpawn(DHPlayer PC)
 {
     local vector SpawnLocation;
     local rotator SpawnRotation;
+    local DarkestHourGame G;
+
+    G = DarkestHourGame(Level.Game);
 
     if (CanSpawnWithParameters(GRI, PC.GetTeamNum(), Pc.GetRoleIndex(), PC.GetSquadIndex(), PC.VehiclePoolIndex))
     {
@@ -174,11 +180,12 @@ function bool PerformSpawn(DHPlayer PC)
 
         if (PC.VehiclePoolIndex >= 0)
         {
-            // spawn vehicle
+            return G.SpawnManager.SpawnVehicle(PC, SpawnLocation, SpawnRotation) != none;
         }
         else
         {
             // spawn infantry
+            return G.SpawnPawn(PC, SpawnLocation, SpawnRotation) != none;
         }
     }
 
@@ -196,18 +203,18 @@ function GetSpawnPosition(out vector SpawnLocation, out rotator SpawnRotation, i
     local int           LocationHintIndex, i, j, k;
     local bool          bIsBlocked;
     local class<ROVehicle>  VehicleClass;
-    local float         CollisionRadius;
+    local float         TestCollisionRadius;
 
     if (VehiclePoolIndex >= 0)
     {
         LocationHints = VehicleLocationHints;
         VehicleClass = class<ROVehicle>(GRI.GetVehiclePoolVehicleClass(VehiclePoolIndex));
-        CollisionRadius = VehicleClass.default.CollisionRadius;
+        TestCollisionRadius = VehicleClass.default.CollisionRadius;
     }
     else
     {
         LocationHints = InfantryLocationHints;
-        CollisionRadius = class'DHPawn'.default.CollisionRadius;
+        TestCollisionRadius = class'DHPawn'.default.CollisionRadius;
     }
 
     // Scramble location hint indices so we don't use the same ones repeatedly
@@ -255,7 +262,7 @@ function GetSpawnPosition(out vector SpawnLocation, out rotator SpawnRotation, i
 
         bIsBlocked = false;
 
-        foreach RadiusActors(class'Pawn', P, CollisionRadius, LocationHints[LocationHintIndices[i]].Location)
+        foreach RadiusActors(class'Pawn', P, TestCollisionRadius, LocationHints[LocationHintIndices[i]].Location)
         {
             // Found a blocking pawn, so ignore this location hint & exit the foreach iteration
             bIsBlocked = true;

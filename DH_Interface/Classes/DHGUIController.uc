@@ -183,6 +183,7 @@ defaultproperties
     DefaultStyleNames(89)="DH_Interface.DHStyle_LargeEditBox"
     DefaultStyleNames(90)="DH_Interface.DHStyle_ServerBrowserGridRed"
     DefaultStyleNames(91)="DH_Interface.DHStyle_RallyPointButton"
+    DefaultStyleNames(92)="DH_Interface.DHStyle_SpawnPointBlockedButton"
     RequestDataMenu="DH_Interface.DHGetDataMenu"
     DynArrayPropertyMenu="DH_Interface.DHGUIDynArrayPage"
     FilterMenu="DH_Interface.DHFilterListPage"

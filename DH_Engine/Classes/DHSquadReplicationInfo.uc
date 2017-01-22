@@ -56,7 +56,7 @@ var private byte                    AxisLocked[TEAM_SQUADS_MAX];
 var private ESquadOrderType         AxisOrderTypes[TEAM_SQUADS_MAX];
 var private vector                  AxisOrderLocations[TEAM_SQUADS_MAX];
 
-var DHSpawnPoint_SquadRallyPoint               RallyPoints[16];
+var DHSpawnPoint_SquadRallyPoint    RallyPoints[16];
 
 var private DHPlayerReplicationInfo AlliesMembers[TEAM_SQUAD_MEMBERS_MAX];
 var private string                  AlliesNames[TEAM_SQUADS_MAX];
@@ -428,6 +428,7 @@ function bool LeaveSquad(DHPlayerReplicationInfo PRI)
     local DHPlayer PC;
     local DHVoiceReplicationInfo VRI;
     local VoiceChatRoom SquadVCR, TeamVCR;
+    local int i;
 
     if (PRI == none)
     {
@@ -497,6 +498,16 @@ function bool LeaveSquad(DHPlayerReplicationInfo PRI)
         // Squad is now empty, so clear the orders so that if the squad becomes
         // active again, there aren't leftover orders sitting around.
         InternalSetSquadOrder(TeamIndex, PRI.SquadIndex, ORDER_None, vect(0, 0, 0));
+
+        // Destroy all rally points.
+        for (i = 0; i < arraycount(RallyPoints); ++i)
+        {
+            if (RallyPoints[i].TeamIndex == TeamIndex &&
+                RallyPoints[i].SquadIndex == PRI.SquadIndex)
+            {
+                RallyPoints[i].Destroy();
+            }
+        }
     }
 
     PRI.SquadIndex = -1;
@@ -1167,24 +1178,29 @@ function DHSpawnPoint_SquadRallyPoint GetRallyPoint(int TeamIndex, int SquadInde
     return none;
 }
 
+const RALLY_POINT_RADIUS_IN_METERS = 100;
+
 function bool CanCreateRallyPoint(DHPlayer PC)
 {
-    // TODO: cannot be too close to another rally point
     // TODO: can't have placed a rally point recently (say, 90-120 seconds?)
     // TODO: can't have recently exited a vehicle
     // TODO: can't be inside a minefield
-    // TODO: can't be inside an objective
+    // TODO: can't be inside an objective?? (maybe)
     local Pawn OtherPawn;
     local DHPawn P;
     local DHPlayerReplicationInfo PRI, OtherPRI;
     local bool bIsNearSquadmate;
+    local int i;
+
+    if (PC == none)
+    {
+        return false;
+    }
 
     P = DHPawn(PC.Pawn);
 
     if (P == none)
     {
-        Log("PC is not a DHPawn");
-
         return false;
     }
 
@@ -1193,12 +1209,24 @@ function bool CanCreateRallyPoint(DHPlayer PC)
     // Must be a squad leader
     if (PRI == none || !PRI.IsSquadLeader())
     {
-        Log("Player is not a squad leader");
-
         return false;
     }
 
-    Log("Level.NetMode" @ Level.NetMode);
+    // TODO: cannot be too close to another rally point
+
+    for (i = 0; i < arraycount(RallyPoints); ++i)
+    {
+        if (RallyPoints[i] != none &&
+            RallyPoints[i].TeamIndex == PC.GetTeamNum() &&
+            RallyPoints[i].SquadIndex == PC.GetSquadIndex())
+        {
+            if (VSize(RallyPoints[i].Location - PC.Location) < RALLY_POINT_RADIUS_IN_METERS)
+            {
+                return false;
+            }
+        }
+    }
+    // TODO: when squad disbands, destroy all rally points
 
     if (Level.NetMode != NM_Standalone)
     {
@@ -1285,8 +1313,6 @@ function DHSpawnPoint_SquadRallyPoint SpawnRallyPoint(DHPlayer PC)
     }
 
     RallyPoints[RallyPointIndex] = RP;
-
-    // TODO: send squad leader a message that the RP will be active in 15 seconds
 
     return RP;
 }

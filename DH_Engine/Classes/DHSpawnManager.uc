@@ -40,7 +40,6 @@ struct VehiclePool
 var()   array<VehiclePool>  VehiclePools;
 var()   byte                MaxTeamVehicles[2];
 
-var     private     byte                    TeamVehicleCounts[2];
 var     private     array<ROVehicle>        Vehicles;
 var     private     array<DHSpawnPoint>     SpawnPoints;
 var     private     DHGameReplicationInfo   GRI;
@@ -123,11 +122,6 @@ function Reset()
         SpawnPoints[i].bIsLocked = SpawnPoints[i].bIsInitiallyLocked;
     }
 
-    for (i = 0; i < arraycount(GRI.SpawnVehicles); ++i)
-    {
-        GRI.SpawnVehicles[i].VehiclePoolIndex = -1;
-    }
-
     for (i = 0; i < VehiclePools.Length; ++i)
     {
         SetVehiclePoolIsActive(i, VehiclePools[i].bIsInitiallyActive);
@@ -171,8 +165,16 @@ function ROVehicle SpawnVehicle(DHPlayer PC, vector SpawnLocation, rotator Spawn
     local int       i;
     local DHPlayerReplicationInfo PRI;
     local DHSpawnPointBase SP;
+    local DHVehicle DHV;
 
     if (PC == none || PC.Pawn != none)
+    {
+        return none;
+    }
+
+    SP = GRI.SpawnPoints[PC.SpawnPointIndex];
+
+    if (SP == none || !SP.CanSpawnWithParameters(GRI, PC.GetTeamNum(), PC.GetRoleIndex(), PC.GetSquadIndex(), PC.VehiclePoolIndex))
     {
         return none;
     }
@@ -186,7 +188,7 @@ function ROVehicle SpawnVehicle(DHPlayer PC, vector SpawnLocation, rotator Spawn
         return none;
     }
 
-    if (!CanSpawnVehicle(PC.SpawnPointIndex, PC.VehiclePoolIndex))
+    if (!GRI.CanSpawnVehicle(PC.VehiclePoolIndex))
     {
         return none;
     }
@@ -218,21 +220,31 @@ function ROVehicle SpawnVehicle(DHPlayer PC, vector SpawnLocation, rotator Spawn
         V.ParentFactory = self;
         Vehicles[Vehicles.Length] = V;
 
+        DHV = DHVehicle(V);
+
         // Start engine
-        if (V.IsA('DHVehicle') && DHVehicle(V).bEngineOff)
+        if (DHV != none && DHV.bEngineOff)
         {
-            DHVehicle(V).bIsSpawnVehicle = VehiclePools[PC.VehiclePoolIndex].bIsSpawnVehicle;
-            DHVehicle(V).ServerStartEngine();
+            DHV.ServerStartEngine();
         }
 
-        // If it's a spawn vehicle that doesn't require the engine to be off, add to GRI's SpawnVehicles array
+        // If this vehicle is a spawn vehicle, create the spawn point attachment
         if (VehiclePools[PC.VehiclePoolIndex].bIsSpawnVehicle)
         {
-            GRI.AddSpawnVehicle(PC.VehiclePoolIndex, V);
+            if (DHV != none)
+            {
+                DHV.SpawnPointAttachment = DHSpawnPoint_Vehicle(DHV.SpawnAttachment(class'DHSpawnPoint_Vehicle'));
+
+                if (DHV.SpawnPointAttachment != none)
+                {
+                    DHV.SpawnPointAttachment.Vehicle = DHV;
+                    DHV.SpawnPointAttachment.TeamIndex = V.default.VehicleTeam;
+                }
+            }
         }
 
         // Increment vehicle counts
-        ++TeamVehicleCounts[V.default.VehicleTeam];
+        ++GRI.TeamVehicleCounts[V.default.VehicleTeam];
 
         if (!VehiclePools[PC.VehiclePoolIndex].bIgnoreMaxTeamVehicles)
         {
@@ -292,70 +304,32 @@ function ROVehicle SpawnVehicle(DHPlayer PC, vector SpawnLocation, rotator Spawn
     return V;
 }
 
-function bool CanSpawnVehicle(int SpawnPointIndex, int VehiclePoolIndex)
-{
-    local class<ROVehicle> VC;
-    local DHSpawnPointBase SP;
-
-    if (GRI == none)
-    {
-        return false;
-    }
-
-    if (VehiclePoolIndex < 0 || VehiclePoolIndex >= VEHICLE_POOLS_MAX)
-    {
-        return false;
-    }
-
-    SP = GRI.GetSpawnPoint(SpawnPointIndex);
-
-    if (SP == none || !SP.CanSpawnVehicle(VehiclePoolIndex))
-    {
-        return false;
-    }
-
-    if (!GRI.IgnoresMaxTeamVehiclesFlags(VehiclePoolIndex) &&
-        TeamVehicleCounts[VC.default.VehicleTeam] >= MaxTeamVehicles[VC.default.VehicleTeam])
-    {
-        return false;
-    }
-
-    if (!GRI.IsVehiclePoolActive(VehiclePoolIndex))
-    {
-        return false;
-    }
-
-    if (Level.TimeSeconds < GRI.VehiclePoolNextAvailableTimes[VehiclePoolIndex])
-    {
-        return false;
-    }
-
-    if (GRI.VehiclePoolSpawnCounts[VehiclePoolIndex] >= GRI.VehiclePoolMaxSpawns[VehiclePoolIndex])
-    {
-        return false;
-    }
-
-    if (GRI.VehiclePoolActiveCounts[VehiclePoolIndex] >= GRI.VehiclePoolMaxActives[VehiclePoolIndex])
-    {
-        return false;
-    }
-
-    return true;
-}
-
 event VehicleDestroyed(Vehicle V)
 {
     local ROVehicle ROV;
     local int       NextAvailableTime, i, j;
     local bool      bWasSpawnKilled;
+    local DHVehicle DHV;
+
     const SPAWN_KILL_RESPAWN_TIME = 2;
 
     super.VehicleDestroyed(V);
 
-    // Find out if the vehicle was spawned killed
-    if (V.IsA('DHVehicle') && DHVehicle(V).IsSpawnKillProtected())
+    DHV = DHVehicle(V);
+
+    if (DHV != none)
     {
-        bWasSpawnKilled = true;
+        // Find out if the vehicle was spawned killed
+        if (DHV.IsSpawnKillProtected())
+        {
+            bWasSpawnKilled = true;
+        }
+
+        // Destroy spawn point attachment
+        if (DHV.SpawnPointAttachment != none)
+        {
+            DHV.SpawnPointAttachment.Destroy();
+        }
     }
 
     // Removes the destroyed vehicle from the managed Vehicles array
@@ -363,7 +337,7 @@ event VehicleDestroyed(Vehicle V)
     {
         if (V == Vehicles[i])
         {
-            --TeamVehicleCounts[Vehicles[i].VehicleTeam];
+            --GRI.TeamVehicleCounts[Vehicles[i].VehicleTeam];
 
             Vehicles.Remove(i, 1);
 
@@ -376,7 +350,7 @@ event VehicleDestroyed(Vehicle V)
     {
         // Find the matching VehicleClass but also check the bIsSpawnVehicle setting also matches
         // Vital as same VehicleClass may well be in the vehicles list twice, with one being a spawn vehicle & the other the ordinary version, e.g. a half-track & a spawn vehicle HT
-        if (V.class == VehiclePools[i].VehicleClass && !(DHVehicle(V) != none && DHVehicle(V).bIsSpawnVehicle != VehiclePools[i].bIsSpawnVehicle))
+        if (V.class == VehiclePools[i].VehicleClass && !(DHVehicle(V) != none && DHVehicle(V).IsSpawnVehicle() != VehiclePools[i].bIsSpawnVehicle))
         {
             // Updates due to vehicle being destroyed
             GRI.VehiclePoolActiveCounts[i] -= 1;
@@ -459,9 +433,6 @@ event VehicleDestroyed(Vehicle V)
             break;
         }
     }
-
-    // Check whether we need to remove a spawn vehicle from the spawn vehicles array
-    GRI.RemoveSpawnVehicle(V);
 }
 
 //==============================================================================
@@ -726,25 +697,6 @@ function ToggleVehiclePoolIsActiveByTag(name VehiclePoolTag)
     {
         SetVehiclePoolIsActive(VehiclePoolIndices[i], !GRI.IsVehiclePoolActive(VehiclePoolIndices[i]));
     }
-}
-
-//==============================================================================
-// Spawn Vehicle Functions
-//==============================================================================
-
-function int GetSpawnVehicleCount()
-{
-    local int SpawnVehicleCount, i;
-
-    for (i = 0; i < arraycount(GRI.SpawnVehicles); ++i)
-    {
-        if (GRI.SpawnVehicles[i].Vehicle != none)
-        {
-            ++SpawnVehicleCount;
-        }
-    }
-
-    return SpawnVehicleCount;
 }
 
 function BroadcastTeamLocalizedMessage(byte Team, class<LocalMessage> MessageClass, int Switch, optional PlayerReplicationInfo RelatedPRI_1, optional PlayerReplicationInfo RelatedPRI_2, optional Object OptionalObject)

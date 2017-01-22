@@ -24,6 +24,9 @@ var localized string SquadNoLeaderMessage;
 var localized string SquadLockedMessage;
 var localized string SquadUnlockedMessage;
 var localized string SquadCreatedMessage;
+var localized string SquadRallyPointActiveMessage;
+var localized string SquadRallyPointTooCloseMessage;
+var localized string SquadRallyPointExhaustedMessage;
 
 // This is overridden to change the hard link to ROPlayer that caused a bug where
 // bUseNativeRoleNames was not being honored.
@@ -190,6 +193,12 @@ static function string GetString(optional int Switch, optional PlayerReplication
             return default.SquadUnlockedMessage;
         case 43:
             return default.SquadCreatedMessage;
+        case 44:
+            return default.SquadRallyPointActiveMessage;
+        case 45:
+            return Repl(default.SquadRallyPointTooCloseMessage, "{0}", UInteger(OptionalObject).Value);
+        case 46:
+            return default.SquadRallyPointExhaustedMessage;
         default:
             break;
     }
@@ -248,4 +257,8 @@ defaultproperties
     SquadLockedMessage="The squad has been locked."
     SquadUnlockedMessage="The squad has been unlocked."
     SquadCreatedMessage="You have created a squad."
+    SquadRallyPointActiveMessage="The squad has established a new rally point."
+    SquadRallyPointTooCloseMessage="You cannot establish a rally point within {0} meters of an existing rally point."
+    SquadRallyPointExhaustedMessage="A squad rally point has been exhausted."
 }
+

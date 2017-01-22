@@ -22,6 +22,10 @@ var int TeamIndex;
 var ESpawnPointBlockReason BlockReason;
 var private bool bIsActive;
 
+// These are used for the drawing on the deploy menu.
+var string StyleName;
+var string BlockedStyleName;
+
 var protected DHGameReplicationInfo GRI;
 
 // The amount of time, in seconds, that a player will be invulnerable after
@@ -51,10 +55,7 @@ simulated event PostBeginPlay()
 
 function bool PerformSpawn(DHPlayer PC);
 
-simulated function bool CanSpawnVehicle(int VehiclePoolIndex)
-{
-    return false;
-}
+simulated function bool CanSpawnVehicle(int VehiclePoolIndex);
 
 simulated function bool CanSpawnRole(DHRoleInfo RI)
 {
@@ -136,6 +137,18 @@ function SetIsActive(bool bIsActive)
     }
 }
 
+simulated function string GetStyleName()
+{
+    if (IsBlocked())
+    {
+        return "DHSpawnPointBlockedButtonStyle";
+    }
+    else
+    {
+        return "DHSpawnButtonStyle";
+    }
+}
+
 function OnSpawn();
 
 defaultproperties
@@ -145,5 +158,8 @@ defaultproperties
     SpawnKillProtectionTime=5
     bAlwaysRelevant=true
     RemoteRole=ROLE_SimulatedProxy
+    bIsActive=true
+    StyleName=""
+    BlockedStyleName=""
 }
 

@@ -19,6 +19,13 @@ replication
         Vehicle;
 }
 
+function PostBeginPlay()
+{
+    super.PostBeginPlay();
+
+    SetTimer(1.0, true);
+}
+
 function Timer()
 {
     local Pawn        P;
@@ -27,6 +34,8 @@ function Timer()
 
     if (Role == ROLE_Authority)
     {
+        BlockReason = SPBR_None;
+
         // Check whether there is an enemy pawn within blocking distance of this spawn vehicle
         foreach Vehicle.RadiusActors(class'Pawn', P, SPAWN_VEHICLES_BLOCK_RADIUS)
         {
@@ -209,6 +218,18 @@ function bool PerformSpawn(DHPlayer PC)
     PC.ServerNextViewPoint();
 
     return false;
+}
+
+simulated function string GetStyleName()
+{
+    if (IsBlocked())
+    {
+        return "DHSpawnVehicleBlockedButtonStyle";
+    }
+    else
+    {
+        return "DHSpawnVehicleButtonStyle";
+    }
 }
 
 defaultproperties
