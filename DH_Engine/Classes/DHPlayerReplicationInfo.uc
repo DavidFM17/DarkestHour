@@ -5,17 +5,17 @@
 
 class DHPlayerReplicationInfo extends ROPlayerReplicationInfo;
 
-replication
-{
-    reliable if (bNetDirty && Role == ROLE_Authority)
-        SquadIndex, SquadMemberIndex;
-}
-
 var     int                     SquadIndex;
 var     int                     SquadMemberIndex;
 
 var     float                   NameDrawStartTime;
 var     float                   LastNameDrawTime;
+
+replication
+{
+    reliable if (bNetDirty && Role == ROLE_Authority)
+        SquadIndex, SquadMemberIndex;
+}
 
 simulated function bool IsSquadLeader()
 {

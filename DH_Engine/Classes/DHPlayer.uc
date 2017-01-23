@@ -77,7 +77,7 @@ var     bool                    bIgnoreSquadInvitations;
 var     vector                  SquadMemberLocations[12];   // SQUAD_SIZE_MAX
 var     vector                  SquadRallyPoints[2];        // A value of (0,0,0) means the rally point is inactive
 
-var     DHCommandInteraction    SquadOrderInteraction;
+var     DHCommandInteraction    CommandInteraction;
 
 struct SquadSignal
 {
@@ -4278,30 +4278,15 @@ function SeverSquadJoinAuto()
     }
 }
 
-simulated exec function SquadInvite(string PlayerName)
+function ServerSquadInvite(DHPlayerReplicationInfo Recipient)
 {
-    ServerSquadInvite(PlayerName);
-}
-
-function ServerSquadInvite(string PlayerName)
-{
-    local int i;
-    local DHPlayerReplicationInfo PRI, Recipient;
+    local DHPlayerReplicationInfo PRI;
 
     PRI = DHPlayerReplicationInfo(PlayerReplicationInfo);
 
-    for (i = 0; i < GameReplicationInfo.PRIArray.Length; ++i)
+    if (SquadReplicationInfo != none && PRI != none && PRI.IsSquadLeader() && !Recipient.IsInSquad())
     {
-        if (PlayerName ~= GameReplicationInfo.PRIArray[i].PlayerName)
-        {
-            Recipient = DHPlayerReplicationInfo(GameReplicationInfo.PRIArray[i]);
-            break;
-        }
-    }
-
-    if (SquadReplicationInfo != none && PRI != none && PRI.IsInSquad())
-    {
-        SquadReplicationInfo.InviteToSquad(DHPlayerReplicationInfo(PlayerReplicationInfo), GetTeamNum(), PRI.SquadIndex, Recipient);
+        SquadReplicationInfo.InviteToSquad(PRI, GetTeamNum(), PRI.SquadIndex, Recipient);
     }
 }
 
@@ -4464,31 +4449,71 @@ function ServerSquadSay(string Msg)
 
 exec function ShowOrderMenu()
 {
-    local DHPlayerReplicationInfo PRI;
+    local string MenuClassName;
+    local Object MenuObject;
+
+    if (CommandInteraction == none && Pawn != none && !IsDead())
+    {
+        if (GetCommandInteractionMenu(MenuClassName, MenuObject))
+        {
+            CommandInteraction = DHCommandInteraction(Player.InteractionMaster.AddInteraction("DH_Engine.DHCommandInteraction", Player));
+            CommandInteraction.PushMenu(MenuClassName, MenuObject);
+        }
+    }
+}
+
+function bool GetCommandInteractionMenu(out string MenuClassName, out Object MenuObject)
+{
+    local Pawn OtherPawn;
+    local DHPlayerReplicationInfo PRI, OtherPRI;
+    local vector TraceStart, TraceEnd, HitLocation, HitNormal;
 
     PRI = DHPlayerReplicationInfo(PlayerReplicationInfo);
 
-    if (SquadOrderInteraction == none &&
-        Pawn != none &&
-        !IsDead() &&
-        PRI != none &&
-        PRI.IsSquadLeader())
+    if (PRI == none || !PRI.IsSquadLeader())
     {
-        SquadOrderInteraction = DHCommandInteraction(Player.InteractionMaster.AddInteraction("DH_Engine.DHCommandInteraction", Player));
-
-        // TODO: invitation!
-        SquadOrderInteraction.PushMenu("DH_Engine.DHCommandMenu_SquadLeader");
+        return false;
     }
+
+    // Trace out into the world and find a pawn we are looking at.
+    TraceStart = Pawn.Location + Pawn.EyePosition();
+    TraceEnd = TraceStart + (GetMaxViewDistance() * vector(Rotation));
+    OtherPawn = Pawn(Trace(HitLocation, HitNormal, TraceEnd, TraceStart, true));
+
+    if (OtherPawn != none && OtherPawn.PlayerReplicationInfo != none)
+    {
+        OtherPRI = DHPlayerReplicationInfo(OtherPawn.PlayerReplicationInfo);
+
+        if (OtherPRI != none && OtherPRI.Team.TeamIndex == GetTeamNum())
+        {
+            MenuObject = OtherPRI;
+
+            if (class'DHPlayerReplicationInfo'.static.IsInSameSquad(PRI, OtherPRI))
+            {
+                MenuClassName = "DH_Engine.DHCommandMenu_SquadManageMember";
+            }
+            else
+            {
+                MenuClassName = "DH_Engine.DHCommandMenu_SquadManageNonMember";
+            }
+
+            return true;
+        }
+    }
+
+    MenuClassName = "DH_Engine.DHCommandMenu_SquadLeader";
+
+    return true;
 }
 
 exec function HideOrderMenu()
 {
     // TODO: on death, hide order menu
-    if (SquadOrderInteraction != none)
+    if (CommandInteraction != none)
     {
-        SquadOrderInteraction.Hide();
+        CommandInteraction.Hide();
 
-        SquadOrderInteraction = none;
+        CommandInteraction = none;
     }
 }
 

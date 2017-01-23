@@ -26,12 +26,36 @@ var localized string SquadRallyPointNeedSquadmateNearby;
 var localized string SquadRallyPointCreatedMessage;
 var localized string SquadRallyPointOverrunMessage;
 var localized string SquadRallyPointGroundTooSteep;
+var localized string SquadRallyPointInMinefield;
+var localized string SquadRallyPointInWater;
+var localized string SquadRallyPointNotOnFoot;
+var localized string SquadRallyPointTooSoon;
+
+// Packs multiple integral values for use in the `Switch`.
+// [222222222222222][11111111][00000000]
+static function int SwitchPack(int Switch, optional int Value1, optional int Value2)
+{
+    return (Switch | ((Value1 & 0xFF) << 8) | ((Value2 & 0xFFFF) << 16));
+}
+
+static function int SwitchUnpack(int Switch, optional out int Value1, optional out int Value2)
+{
+    Value1 = ((Switch >> 8) & 0xFF);
+    Value2 = ((Switch >> 16) & 0xFFFF);
+
+    return (Switch & 0xFF);
+}
 
 // This is overridden to change the hard link to ROPlayer that caused a bug where
 // bUseNativeRoleNames was not being honored.
-static function string GetString(optional int Switch, optional PlayerReplicationInfo RelatedPRI_1, optional PlayerReplicationInfo RelatedPRI_2, optional Object OptionalObject)
+static function string GetString(optional int S, optional PlayerReplicationInfo RelatedPRI_1, optional PlayerReplicationInfo RelatedPRI_2, optional Object OptionalObject)
 {
-    switch (Switch)
+    local int Value1;
+    local int Value2;
+
+    S = SwitchUnpack(S, Value1, Value2);
+
+    switch (S)
     {
         case 30:
             return Repl(default.SquadJoinedMessage, "{0}", RelatedPRI_1.PlayerName);
@@ -64,15 +88,25 @@ static function string GetString(optional int Switch, optional PlayerReplication
         case 44:
             return default.SquadRallyPointActiveMessage;
         case 45:
-            return Repl(default.SquadRallyPointTooCloseMessage, "{0}", UInteger(OptionalObject).Value);
+            return Repl(default.SquadRallyPointTooCloseMessage, "{0}", Value2);
         case 46:
             return default.SquadRallyPointExhaustedMessage;
         case 47:
             return default.SquadRallyPointNeedSquadmateNearby;
         case 48:
-            return Repl(default.SquadRallyPointCreatedMessage, "{0}", UInteger(OptionalObject).Value);
+            return Repl(default.SquadRallyPointCreatedMessage, "{0}", Value2);
         case 49:
             return default.SquadRallyPointGroundTooSteep;
+        case 50:
+            return default.SquadRallyPointInMinefield;
+        case 51:
+            return default.SquadRallyPointInWater;
+        case 52:
+            return default.SquadRallyPointNotOnFoot;
+        case 53:
+            return Repl(default.SquadRallyPointTooSoon, "{0}", Value2);
+        case 54:
+            return default.SquadRallyPointOverrunMessage;
         default:
             break;
     }
@@ -97,11 +131,15 @@ defaultproperties
     SquadUnlockedMessage="The squad has been unlocked."
     SquadCreatedMessage="You have created a squad."
     SquadRallyPointActiveMessage="The squad has established a new rally point."
-    SquadRallyPointTooCloseMessage="You cannot establish a rally point within {0} meters of an existing rally point."
+    SquadRallyPointTooCloseMessage="You cannot place a rally point so close to an existing one, you must be {0} meters further away."
     SquadRallyPointExhaustedMessage="A squad rally point has been exhausted."
-    SquadRallyPointNeedSquadmateNearby="You must have at least one other squadmate nearby to establish a rally point."
+    SquadRallyPointNeedSquadmateNearby="You must have at least one other squadmate nearby to create a squad rally point."
     SquadRallyPointCreatedMessage="A squad rally point will be established in {0} seconds."
     SquadRallyPointOverrunMessage="A squad rally point has been overrun by enemies."
     SquadRallyPointGroundTooSteep="The ground is too steep to establish a rally point here."
+    SquadRallyPointInMinefield="You cannot create a squad rally point in a minefield."
+    SquadRallyPointInWater="You cannot create a squad rally point in water."
+    SquadRallyPointNotOnFoot="You must be on foot to create a rally point."
+    SquadRallyPointTooSoon="You must wait {0} seconds until your squad can create another rally point."
 }
 

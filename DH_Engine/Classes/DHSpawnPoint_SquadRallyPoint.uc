@@ -13,9 +13,12 @@ var int SpawnsRemaining;
 var int SpawnKillCount;
 var sound CreationSound;
 
-var int SecondsToEstablish;
+var int EncroachmentRadiusInMeters;
+var int EncroachmentPenaltyBlockThreshold;
+var int EncroachmentPenaltyOverrunThreshold;
+var int EncroachmentPenaltyCounter;
 
-// TODO: don't allow placement of the rally point under water, minefield etc.
+var int SecondsToEstablish;
 
 replication
 {
@@ -54,27 +57,50 @@ state Active
 {
     function Timer()
     {
-        // TODO: find out if there are enemies nearby; if enemies are nearby for
-        // long enough (consistently within ~25m for 15 seconds straight, kill the
-        // rally point).
+        local int EncroachingEnemiesCount;
+
         // TODO: destroy immediately if enemies are within a ~10m radius and are
         // within eyeshot
         // TODO: 3-strike rule for spawn kills on the rally point
-        // TODO: broadcast to squad if the rally point is overrun
-        if (HasEnemiesNearby())
+
+        EncroachingEnemiesCount = GetEncroachingEnemyCount();
+
+        if (EncroachingEnemiesCount > 0)
         {
+            EncroachmentPenaltyCounter += EncroachingEnemiesCount;
+        }
+        else
+        {
+            EncroachmentPenaltyCounter -= 2;    // TODO; get rid of magic number
+        }
+
+        EncroachmentPenaltyCounter = Max(0, EncroachmentPenaltyCounter);
+
+        if (EncroachmentPenaltyCounter < default.EncroachmentPenaltyBlockThreshold)
+        {
+            BlockReason = SPBR_None;
+        }
+        else if (EncroachmentPenaltyCounter < default.EncroachmentPenaltyOverrunThreshold)
+        {
+            BlockReason = SPBR_EnemiesNearby;
+        }
+        else
+        {
+            // "A squad rally point has been overrun by enemies."
+            SRI.BroadcastLocalizedMessage(SRI.SquadMessageClass, 54);
+
             Destroy();
         }
     }
 
     event BeginState()
     {
-        if (Role == ROLE_Authority)
-        {
-            // "The squad has established a new rally point."
-            SRI.BroadcastSquadLocalizedMessage(TeamIndex, SquadIndex, SRI.SquadMessageClass, 44);
-            SetIsActive(true);
-        }
+        SetIsActive(true);
+
+        // "The squad has established a new rally point."
+        SRI.BroadcastSquadLocalizedMessage(TeamIndex, SquadIndex, SRI.SquadMessageClass, 44);
+
+        // TODO: need to
     }
 }
 
@@ -98,25 +124,21 @@ simulated function bool CanSpawnWithParameters(DHGameReplicationInfo GRI, int Te
     return true;
 }
 
-function bool HasEnemiesNearby()
+
+function int GetEncroachingEnemyCount()
 {
+    local int i;
     local Pawn P;
 
-    // TODO: remove magic number
-    foreach RadiusActors(class'Pawn', P, class'DHUnits'.static.MetersToUnreal(25))
+    foreach RadiusActors(class'Pawn', P, class'DHUnits'.static.MetersToUnreal(default.EncroachmentRadiusInMeters))
     {
-        if (P == none || P.bDeleteMe || P.Health <= 0)
+        if (P != none && !P.bDeleteMe && P.Health > 0 && P.PlayerReplicationInfo != none && P.GetTeamNum() != TeamIndex)
         {
-            continue;
-        }
-
-        if (P.GetTeamNum() != TeamIndex)
-        {
-            return true;
+            i += 1;
         }
     }
 
-    return false;
+    return i;
 }
 
 function GetSpawnPosition(out vector SpawnLocation, out rotator SpawnRotation, int VehiclePoolIndex)
@@ -203,5 +225,8 @@ defaultproperties
     SpawnKillCount=0
     CreationSound=Sound'Inf_Player.Gibimpact.Gibimpact'
     SecondsToEstablish=30
+    EncroachmentRadiusInMeters=25
+    EncroachmentPenaltyBlockThreshold=10
+    EncroachmentPenaltyOverrunThreshold=30
 }
 

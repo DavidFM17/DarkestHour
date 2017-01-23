@@ -35,7 +35,7 @@ function Hide()
     GotoState('FadeOut');
 }
 
-function DHCommandMenu PushMenu(string ClassName)
+function DHCommandMenu PushMenu(string ClassName, optional Object OptionalObject)
 {
     local DHCommandMenu Menu;
     local class<DHCommandMenu> MenuClass;
@@ -50,6 +50,8 @@ function DHCommandMenu PushMenu(string ClassName)
 
         return none;
     }
+
+    Menu.MenuObject = OptionalObject;
 
     Menus.Push(Menu);
 
@@ -117,20 +119,18 @@ function Tick(float DeltaTime)
 
     PC = DHPlayer(ViewportOwner.Actor);
 
-    if (PC == none || PC.Pawn == none || PC.IsDead())
+    Menu = DHCommandMenu(Menus.Peek());
+
+    if (PC == none || PC.Pawn == none || PC.IsDead() || Menu == none || Menu.ShouldHideMenu())
     {
         Hide();
         return;
     }
 
-    Menu = DHCommandMenu(Menus.Peek());
-
     // Clamp cursor
     Cursor = class'UCore'.static.VClampSize(Cursor, 0.0, OUTER_RADIUS);
 
-    if (Menu != none &&
-        Menu.Options.Length > 0 &&
-        Cursor != vect(0, 0, 0))
+    if (Menu.Options.Length > 0 && Cursor != vect(0, 0, 0))
     {
         // TODO: extract this to a function to be reused, may be useful in
         // other areas.
@@ -167,6 +167,7 @@ function PostRender(Canvas C)
     local float Theta, ArcLength;
     local float CenterX, CenterY, X, Y, XL, YL, U, V;
     local DHCommandMenu Menu;
+    local string OptionText;
 
     if (C == none)
     {
@@ -194,7 +195,6 @@ function PostRender(Canvas C)
         // Draw all the options.
         for (i = 0; i < Menu.Options.Length; ++i)
         {
-
             if (SelectedIndex == i)
             {
                 C.DrawColor = class'UColor'.default.Yellow;
@@ -227,9 +227,11 @@ function PostRender(Canvas C)
     // Display text of selection
     if (SelectedIndex >= 0)
     {
-        C.TextSize(Menu.Options[SelectedIndex].Text, XL, YL);
+        OptionText = Menu.OptionTextForIndex(SelectedIndex);
+
+        C.TextSize(OptionText, XL, YL);
         C.SetPos(CenterX - (XL / 2), CenterY + 32);
-        C.DrawText(Menu.Options[SelectedIndex].Text);
+        C.DrawText(OptionText);
     }
 
 //    // debug rendering for cursor
