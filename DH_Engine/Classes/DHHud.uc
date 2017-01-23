@@ -1582,7 +1582,7 @@ function DrawSignals(Canvas C)
 // We also show a relevant icon above a drawn name if the player is talking or if we can resupply or assist reload them
 function DrawPlayerNames(Canvas C)
 {
-    local DHPlayerReplicationInfo OtherPRI;
+    local DHPlayerReplicationInfo PRI, OtherPRI;
     local ROVehicle               VehicleBase;
     local VehicleWeaponPawn       WepPawn;
     local DHMortarVehicle         Mortar;
@@ -1603,10 +1603,12 @@ function DrawPlayerNames(Canvas C)
         return;
     }
 
+    PRI = DHPlayerReplicationInfo(PlayerOwner.PlayerReplicationInfo);
+
     ViewLocation = PlayerOwner.CalcViewLocation;
 
     // STAGE 1: check if we are looking directly at player (or a vehicle with a player) within 50m, who is not behind something
-    foreach TraceActors(class'Actor', A, HitLocation, HitNormal, ViewLocation + (3018.0 * vector(PlayerOwner.CalcViewRotation)), ViewLocation, vect(32, 32, 32))
+    foreach TraceActors(class'Actor', A, HitLocation, HitNormal, ViewLocation + (3018.0 * vector(PlayerOwner.CalcViewRotation)), ViewLocation)
     {
         if (A.bBlockActors)
         {
@@ -1697,13 +1699,15 @@ function DrawPlayerNames(Canvas C)
 
         bCurrentlyValid = false; // reset for each pawn to be checked
 
+        OtherPRI = DHPlayerReplicationInfo(P.PlayerReplicationInfo);
+
         // The LookedAtPawn is always valid, as we're looking directly at them & know they are within range
         if (P == LookedAtPawn)
         {
             bCurrentlyValid = true;
         }
-        // Player is talking, so will be valid if he's not hidden behind an obstruction (we'll do a line of sight check next)
-        else if (P.PlayerReplicationInfo == PortraitPRI)
+        // Player is talking or is in our squad, so will be valid if he's not hidden behind an obstruction (we'll do a line of sight check next)
+        else if (P.PlayerReplicationInfo == PortraitPRI || class'DHPlayerReplicationInfo'.static.IsInSameSquad(PRI, OtherPRI))
         {
             bMayBeValid = true;
         }
@@ -1772,7 +1776,7 @@ function DrawPlayerNames(Canvas C)
     if (NamedPawns.Length > 0)
     {
         C.Font = GetPlayerNameFont(C);
-        TeamColor = GetPlayerColor(DHPlayerReplicationInfo(PlayerOwner.PlayerReplicationInfo));
+        TeamColor = GetPlayerColor(OtherPRI);
     }
 
     for (i = NamedPawns.Length - 1; i >= 0; --i)
@@ -1886,7 +1890,7 @@ function DrawPlayerNames(Canvas C)
 
         // Set to draw the name & name icon in our team's color
         // And if player's name is fading in or out, lower the drawing alpha value accordingly
-        C.DrawColor = TeamColor;
+        C.DrawColor = GetPlayerColor(OtherPRI);
 
         if (NameFadeTime < 1.0 && NameFadeTime >= 0.0)
         {
