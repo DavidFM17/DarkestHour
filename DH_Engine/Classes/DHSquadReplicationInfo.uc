@@ -428,6 +428,7 @@ function bool LeaveSquad(DHPlayerReplicationInfo PRI)
 {
     local int TeamIndex;
     local DHPlayer PC;
+    local DHBot Bot;
     local DHVoiceReplicationInfo VRI;
     local VoiceChatRoom SquadVCR, TeamVCR;
     local int i;
@@ -438,13 +439,14 @@ function bool LeaveSquad(DHPlayerReplicationInfo PRI)
     }
 
     PC = DHPlayer(PRI.Owner);
+    Bot = DHBot(PRI.Owner);
 
-    if (PC == none)
+    if (PC == none && Bot == none)
     {
         return false;
     }
 
-    TeamIndex = PC.GetTeamNum();
+    TeamIndex = PRI.Team.TeamIndex;
 
     if (PRI.SquadIndex == -1)
     {
@@ -455,8 +457,11 @@ function bool LeaveSquad(DHPlayerReplicationInfo PRI)
 
     if (GetMember(TeamIndex, PRI.SquadIndex, PRI.SquadMemberIndex) != PRI)
     {
-        // Invalid state (should never happen)
-        PC.ClientLeaveSquadResult(SE_InvalidState);
+        if (PC != none)
+        {
+            // Invalid state (should never happen)
+            PC.ClientLeaveSquadResult(SE_InvalidState);
+        }
 
         return false;
     }
@@ -486,12 +491,15 @@ function bool LeaveSquad(DHPlayerReplicationInfo PRI)
             // Change the player's voice channel to the "team" channel.
             Level.Game.ChangeVoiceChannel(PRI, TeamVCR.ChannelIndex, SquadVCR.ChannelIndex);
 
-            if (TeamVCR != none && TeamVCR.IsMember(PRI))
+            if (PC != none && TeamVCR != none && TeamVCR.IsMember(PRI))
             {
                 PC.ClientSetActiveRoom(TeamVCR.ChannelIndex);
             }
 
-            PC.ServerLeaveVoiceChannel(SquadVCR.ChannelIndex);
+            if (PC != none)
+            {
+                PC.ServerLeaveVoiceChannel(SquadVCR.ChannelIndex);
+            }
         }
     }
 
@@ -518,7 +526,10 @@ function bool LeaveSquad(DHPlayerReplicationInfo PRI)
     PRI.SquadIndex = -1;
     PRI.SquadMemberIndex = -1;
 
-    PC.ClientLeaveSquadResult(SE_None);
+    if (PC != none)
+    {
+        PC.ClientLeaveSquadResult(SE_None);
+    }
 
     return true;
 }
@@ -606,6 +617,7 @@ function int JoinSquad(DHPlayerReplicationInfo PRI, byte TeamIndex, int SquadInd
     local bool bDidJoinSquad;
     local int i;
     local DHPlayer PC;
+    local DHBot Bot;
     local DHVoiceReplicationInfo VRI;
 
     if (PRI == none || PRI.Team == none || PRI.Team.TeamIndex != TeamIndex)
@@ -614,22 +626,29 @@ function int JoinSquad(DHPlayerReplicationInfo PRI, byte TeamIndex, int SquadInd
     }
 
     PC = DHPlayer(PRI.Owner);
+    Bot = DHBot(PRI.Owner);
 
-    if (PC == none)
+    if (PC == none && Bot == none)
     {
         return -1;
     }
 
     if (!IsSquadActive(TeamIndex, SquadIndex) || IsInSquad(PRI, TeamIndex, SquadIndex))
     {
-        PC.ClientJoinSquadResult(SE_BadSquad);
+        if (PC != none)
+        {
+            PC.ClientJoinSquadResult(SE_BadSquad);
+        }
 
         return -1;
     }
 
     if (!bWasInvited && IsSquadLocked(TeamIndex, SquadIndex))
     {
-        PC.ClientJoinSquadResult(SE_Locked);
+        if (PC != none)
+        {
+            PC.ClientJoinSquadResult(SE_Locked);
+        }
 
         return -1;
     }
@@ -650,17 +669,20 @@ function int JoinSquad(DHPlayerReplicationInfo PRI, byte TeamIndex, int SquadInd
 
     if (bDidJoinSquad)
     {
-        VRI = DHVoiceReplicationInfo(PC.VoiceReplicationInfo);
-
-        if (VRI != none)
-        {
-            VRI.JoinSquadChannel(PRI, TeamIndex, SquadIndex);
-        }
-
         // "{0} has joined the squad"
         BroadcastSquadLocalizedMessage(TeamIndex, SquadIndex, SquadMessageClass, 30, PRI);
 
-        PC.ClientJoinSquadResult(SE_None);
+        if (PC != none)
+        {
+            VRI = DHVoiceReplicationInfo(PC.VoiceReplicationInfo);
+
+            if (VRI != none)
+            {
+                VRI.JoinSquadChannel(PRI, TeamIndex, SquadIndex);
+            }
+
+            PC.ClientJoinSquadResult(SE_None);
+        }
     }
 }
 
@@ -704,12 +726,16 @@ simulated function bool IsOnTeam(DHPlayerReplicationInfo PRI, int TeamIndex)
 function bool InviteToSquad(DHPlayerReplicationInfo PRI, byte TeamIndex, int SquadIndex, DHPlayerReplicationInfo Recipient)
 {
     local DHPlayer PC, OtherPC;
+    local DHBot Bot;
+
+    Log("InviteToSquad" @ Recipient);
 
     if (Recipient == none ||
         !IsOnTeam(PRI, TeamIndex) ||
         !IsOnTeam(Recipient, TeamIndex) ||
         !IsSquadLeader(PRI, TeamIndex, SquadIndex))
     {
+        Log("A");
         return false;
     }
 
@@ -728,6 +754,8 @@ function bool InviteToSquad(DHPlayerReplicationInfo PRI, byte TeamIndex, int Squ
 
     if (Recipient.IsInSquad())
     {
+        Log("B");
+
         if (PC != none)
         {
             // "Invitation could not be sent because {0} is already in a squad.";
@@ -750,6 +778,18 @@ function bool InviteToSquad(DHPlayerReplicationInfo PRI, byte TeamIndex, int Squ
 
         // "{0} has invited you to join {1} squad."
         OtherPC.ClientSquadInvite(PRI.PlayerName, GetSquadName(TeamIndex, SquadIndex), TeamIndex, SquadIndex);
+    }
+    else
+    {
+        // Bots always and immediately accept squad invitations.
+        Bot = DHBot(Recipient.Owner);
+
+        Log("Recipient.Owner" @ Recipient.Owner);
+
+        if (Bot != none)
+        {
+            JoinSquad(Recipient, TeamIndex, SquadIndex, true);
+        }
     }
 
     return true;
@@ -1254,7 +1294,7 @@ function DHSpawnPoint_SquadRallyPoint SpawnRallyPoint(DHPlayer PC)
         SecondsToWait = Max(1, int(GetSquadNextRallyPointTime(PC.GetTeamNum(), PC.GetSquadIndex()) - Level.TimeSeconds));
 
         // "You must wait {0} seconds before creating a new squad rally point."
-        PC.ReceiveLocalizedMessage(SquadMessageClass, class'DHSquadMessage'.static.SwitchPack(53,, SecondsToWait));
+        PC.ReceiveLocalizedMessage(SquadMessageClass, class'UInteger'.static.FromShorts(53, SecondsToWait));
 
         return none;
     }
@@ -1270,8 +1310,8 @@ function DHSpawnPoint_SquadRallyPoint SpawnRallyPoint(DHPlayer PC)
 
             if (DistanceInMeters < RALLY_POINT_RADIUS_IN_METERS)
             {
-                // "You must be an additional {0} meters away from your squad's other rally point."
-                PC.ReceiveLocalizedMessage(SquadMessageClass, class'DHSquadMessage'.static.SwitchPack(45,, RALLY_POINT_RADIUS_IN_METERS - DistanceInMeters));
+                // "You must be an additional {0} meters away from your squad's other  point."
+                PC.ReceiveLocalizedMessage(SquadMessageClass, class'UInteger'.static.FromShorts(45, RALLY_POINT_RADIUS_IN_METERS - DistanceInMeters));
                 return none;
             }
         }
@@ -1385,7 +1425,7 @@ function DHSpawnPoint_SquadRallyPoint SpawnRallyPoint(DHPlayer PC)
     RallyPoints[RallyPointIndex] = RP;
 
     // "A squad rally point will be established in {0} seconds."
-    PC.ReceiveLocalizedMessage(SquadMessageClass, class'DHSquadMessage'.static.SwitchPack(48,, RP.SecondsToEstablish));
+    PC.ReceiveLocalizedMessage(SquadMessageClass, class'UInteger'.static.FromShorts(48, RP.SecondsToEstablish));
 
     // TODO: remove magic number
     SetSquadNextRallyPointTime(RP.TeamIndex, RP.SquadIndex, Level.TimeSeconds + 120);

@@ -5,6 +5,36 @@
 
 class DHCommandMenu_SquadManageNonMember extends DHCommandMenu;
 
+function OnActive()
+{
+    local DHPlayer PC;
+
+    if (Interaction != none && Interaction.ViewportOwner != none)
+    {
+        PC = DHPlayer(Interaction.ViewportOwner.Actor);
+
+        if (PC != none)
+        {
+            PC.LookTarget = Actor(MenuObject);
+        }
+    }
+}
+
+function OnPop()
+{
+    local DHPlayer PC;
+
+    if (Interaction != none && Interaction.ViewportOwner != none)
+    {
+        PC = DHPlayer(Interaction.ViewportOwner.Actor);
+
+        if (PC != none)
+        {
+            PC.LookTarget = none;
+        }
+    }
+}
+
 function bool ShouldHideMenu()
 {
     return MenuObject == none;
@@ -45,23 +75,22 @@ function bool OnSelect(DHCommandInteraction Interaction, int Index, vector Locat
     return true;
 }
 
-function string OptionTextForIndex(int Index)
+function GetOptionText(int OptionIndex, out string ActionText, out string SubjectText)
 {
     local DHPlayerReplicationInfo OtherPRI;
-    local string PlayerName;
+
+    super.GetOptionText(OptionIndex, ActionText, SubjectText);
 
     OtherPRI = DHPlayerReplicationInfo(MenuObject);
 
     if (OtherPRI != none)
     {
-        PlayerName = OtherPRI.PlayerName;
+        SubjectText = OtherPRI.PlayerName;
     }
-
-    return Repl(Options[Index].Text, "{0}", PlayerName);
 }
 
 defaultproperties
 {
-    Options(0)=(Text="Invite {0} to squad",Material=Material'DH_InterfaceArt_tex.HUD.squad_signal_fire')
+    Options(0)=(ActionText="Invite to squad",Material=Material'DH_InterfaceArt_tex.HUD.squad_signal_fire')
 }
 

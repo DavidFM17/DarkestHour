@@ -56,8 +56,8 @@ function bool OnSelect(DHCommandInteraction Interaction, int Index, vector Locat
 
 defaultproperties
 {
-    Options(0)=(Text="Fire",Material=Material'DH_InterfaceArt_tex.HUD.squad_signal_fire')
-    Options(1)=(Text="Create Rally Point",Material=Material'DH_InterfaceArt_tex.HUD.squad_order_attack')
-    Options(2)=(Text="Defend",Material=Material'DH_InterfaceArt_tex.HUD.squad_order_defend')
-    Options(3)=(Text="Move",Material=Material'DH_InterfaceArt_tex.HUD.squad_signal_move')
+    Options(0)=(ActionText="Fire",Material=Material'DH_InterfaceArt_tex.HUD.squad_signal_fire')
+    Options(1)=(ActionText="Create Rally Point",Material=Material'DH_InterfaceArt_tex.HUD.squad_order_attack')
+    Options(2)=(ActionText="Defend",Material=Material'DH_InterfaceArt_tex.HUD.squad_order_defend')
+    Options(3)=(ActionText="Move",Material=Material'DH_InterfaceArt_tex.HUD.squad_signal_move')
 }

@@ -31,29 +31,11 @@ var localized string SquadRallyPointInWater;
 var localized string SquadRallyPointNotOnFoot;
 var localized string SquadRallyPointTooSoon;
 
-// Packs multiple integral values for use in the `Switch`.
-// [222222222222222][11111111][00000000]
-static function int SwitchPack(int Switch, optional int Value1, optional int Value2)
-{
-    return (Switch | ((Value1 & 0xFF) << 8) | ((Value2 & 0xFFFF) << 16));
-}
-
-static function int SwitchUnpack(int Switch, optional out int Value1, optional out int Value2)
-{
-    Value1 = ((Switch >> 8) & 0xFF);
-    Value2 = ((Switch >> 16) & 0xFFFF);
-
-    return (Switch & 0xFF);
-}
-
-// This is overridden to change the hard link to ROPlayer that caused a bug where
-// bUseNativeRoleNames was not being honored.
 static function string GetString(optional int S, optional PlayerReplicationInfo RelatedPRI_1, optional PlayerReplicationInfo RelatedPRI_2, optional Object OptionalObject)
 {
-    local int Value1;
-    local int Value2;
+    local int ExtraValue;
 
-    S = SwitchUnpack(S, Value1, Value2);
+    class'UInteger'.static.ToShorts(S, S, ExtraValue);
 
     switch (S)
     {
@@ -88,13 +70,13 @@ static function string GetString(optional int S, optional PlayerReplicationInfo 
         case 44:
             return default.SquadRallyPointActiveMessage;
         case 45:
-            return Repl(default.SquadRallyPointTooCloseMessage, "{0}", Value2);
+            return Repl(default.SquadRallyPointTooCloseMessage, "{0}", ExtraValue);
         case 46:
             return default.SquadRallyPointExhaustedMessage;
         case 47:
             return default.SquadRallyPointNeedSquadmateNearby;
         case 48:
-            return Repl(default.SquadRallyPointCreatedMessage, "{0}", Value2);
+            return Repl(default.SquadRallyPointCreatedMessage, "{0}", ExtraValue);
         case 49:
             return default.SquadRallyPointGroundTooSteep;
         case 50:
@@ -104,7 +86,7 @@ static function string GetString(optional int S, optional PlayerReplicationInfo 
         case 52:
             return default.SquadRallyPointNotOnFoot;
         case 53:
-            return Repl(default.SquadRallyPointTooSoon, "{0}", Value2);
+            return Repl(default.SquadRallyPointTooSoon, "{0}", ExtraValue);
         case 54:
             return default.SquadRallyPointOverrunMessage;
         default:

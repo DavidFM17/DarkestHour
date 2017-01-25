@@ -37,7 +37,7 @@ function Hide()
 
 function DHCommandMenu PushMenu(string ClassName, optional Object OptionalObject)
 {
-    local DHCommandMenu Menu;
+    local DHCommandMenu Menu, OldMenu;
     local class<DHCommandMenu> MenuClass;
 
     MenuClass = class<DHCommandMenu>(DynamicLoadObject(ClassName, class'class'));
@@ -51,16 +51,43 @@ function DHCommandMenu PushMenu(string ClassName, optional Object OptionalObject
         return none;
     }
 
+    Menu.Interaction = self;
     Menu.MenuObject = OptionalObject;
 
+    OldMenu = DHCommandMenu(Menus.Peek());
+
+    if (OldMenu != none)
+    {
+        OldMenu.OnPassive();
+    }
+
     Menus.Push(Menu);
+
+    Menu.OnPush();
+    Menu.OnActive();
 
     return Menu;
 }
 
-function PopMenu()
+function DHCommandMenu PopMenu()
 {
-    Menus.Pop();
+    local DHCommandMenu Menu, NewMenu;
+
+    Menu = DHCommandMenu(Menus.Pop());
+
+    if (Menu != none)
+    {
+        Menu.OnPop();
+    }
+
+    NewMenu = DHCommandMenu(Menus.Peek());
+
+    if (NewMenu != none)
+    {
+        NewMenu.OnActive();
+    }
+
+    return Menu;
 }
 
 auto state FadeIn
@@ -101,6 +128,12 @@ state FadeOut
 
         if (MenuAlpha == 0.0)
         {
+            // TODO: run 'pop' on all menus, probably
+            while (!Menus.IsEmpty())
+            {
+                PopMenu();
+            }
+
             ViewportOwner.InteractionMaster.RemoveInteraction(self);
         }
     }
@@ -167,7 +200,7 @@ function PostRender(Canvas C)
     local float Theta, ArcLength;
     local float CenterX, CenterY, X, Y, XL, YL, U, V;
     local DHCommandMenu Menu;
-    local string OptionText;
+    local string ActionText, SubjectText;
 
     if (C == none)
     {
@@ -180,7 +213,7 @@ function PostRender(Canvas C)
     // TODO: get rid of magic numbers
     C.SetPos(CenterX - 8, CenterY - 8);
 
-    // TODO: draw tiny crosshair
+    // Draw menu crosshair
     C.DrawColor = class'UColor'.default.White;
     C.DrawTile(material'DH_InterfaceArt_tex.Communication.menu_crosshair', 16, 16, 0, 0, 16, 16);
 
@@ -227,11 +260,17 @@ function PostRender(Canvas C)
     // Display text of selection
     if (SelectedIndex >= 0)
     {
-        OptionText = Menu.OptionTextForIndex(SelectedIndex);
+        Menu.GetOptionText(SelectedIndex, ActionText, SubjectText);
 
-        C.TextSize(OptionText, XL, YL);
+        // Draw action text
+        C.TextSize(ActionText, XL, YL);
         C.SetPos(CenterX - (XL / 2), CenterY + 32);
-        C.DrawText(OptionText);
+        C.DrawText(ActionText);
+
+        // Draw subject text
+        C.TextSize(SubjectText, XL, YL);
+        C.SetPos(CenterX - (XL / 2), CenterY - 32-  YL);
+        C.DrawText(SubjectText);
     }
 
 //    // debug rendering for cursor

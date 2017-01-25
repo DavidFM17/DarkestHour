@@ -5,6 +5,36 @@
 
 class DHCommandMenu_SquadManageMember extends DHCommandMenu;
 
+function OnActive()
+{
+    local DHPlayer PC;
+
+    if (Interaction != none && Interaction.ViewportOwner != none)
+    {
+        PC = DHPlayer(Interaction.ViewportOwner.Actor);
+
+        if (PC != none)
+        {
+            PC.LookTarget = Pawn(MenuObject);
+        }
+    }
+}
+
+function OnPop()
+{
+    local DHPlayer PC;
+
+    if (Interaction != none && Interaction.ViewportOwner != none)
+    {
+        PC = DHPlayer(Interaction.ViewportOwner.Actor);
+
+        if (PC != none)
+        {
+            PC.LookTarget = none;
+        }
+    }
+}
+
 function bool ShouldHideMenu()
 {
     return MenuObject == none;
@@ -14,6 +44,7 @@ function bool OnSelect(DHCommandInteraction Interaction, int Index, vector Locat
 {
     local DHPlayer PC;
     local DHPlayerReplicationInfo PRI, OtherPRI;
+    local Pawn P;
 
     if (Interaction == none || Interaction.ViewportOwner == none || Index < 0 || Index >= Options.Length)
     {
@@ -21,11 +52,12 @@ function bool OnSelect(DHCommandInteraction Interaction, int Index, vector Locat
     }
 
     PC = DHPlayer(Interaction.ViewportOwner.Actor);
-    OtherPRI = DHPlayerReplicationInfo(MenuObject);
+    P = Pawn(MenuObject);
 
-    if (PC != none && OtherPRI != none)
+    if (PC != none && P != none)
     {
         PRI = DHPlayerReplicationInfo(PC.PlayerReplicationInfo);
+        OtherPRI = DHPlayerReplicationInfo(P.PlayerReplicationInfo);
 
         if (PRI != none)
         {
@@ -51,25 +83,30 @@ function bool OnSelect(DHCommandInteraction Interaction, int Index, vector Locat
     return true;
 }
 
-function string OptionTextForIndex(int Index)
+function GetOptionText(int OptionIndex, out string ActionText, out string SubjectText)
 {
     local DHPlayerReplicationInfo OtherPRI;
-    local string PlayerName;
+    local Pawn P;
 
-    OtherPRI = DHPlayerReplicationInfo(MenuObject);
+    super.GetOptionText(OptionIndex, ActionText, SubjectText);
 
-    if (OtherPRI != none)
+    P = Pawn(MenuObject);
+
+    if (P != none)
     {
-        PlayerName = OtherPRI.PlayerName;
-    }
+        OtherPRI = DHPlayerReplicationInfo(P.PlayerReplicationInfo);
 
-    return Repl(Options[Index].Text, "{0}", PlayerName);
+        if (OtherPRI != none)
+        {
+            SubjectText = OtherPRI.PlayerName;
+        }
+    }
 }
 
 defaultproperties
 {
-    Options(0)=(Text="Kick {0} from squad",Material=Material'DH_InterfaceArt_tex.HUD.squad_signal_fire')
-    Options(1)=(Text="Promote {0} to squad leader",Material=Material'DH_InterfaceArt_tex.HUD.squad_signal_fire')
-    Options(2)=(Text="Ban {0} from squad",Material=Material'DH_InterfaceArt_tex.HUD.squad_signal_fire')
+    Options(0)=(ActionText="Kick from squad",Material=Material'DH_InterfaceArt_tex.HUD.squad_signal_fire')
+    Options(1)=(ActionText="Promote to squad leader",Material=Material'DH_InterfaceArt_tex.HUD.squad_signal_fire')
+    Options(2)=(ActionText="Ban from squad",Material=Material'DH_InterfaceArt_tex.HUD.squad_signal_fire')
 }
 

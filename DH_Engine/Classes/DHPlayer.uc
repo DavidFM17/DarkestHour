@@ -79,6 +79,8 @@ var     vector                  SquadRallyPoints[2];        // A value of (0,0,0
 
 var     DHCommandInteraction    CommandInteraction;
 
+var     Actor                   LookTarget;
+
 struct SquadSignal
 {
     var vector Location;
@@ -569,6 +571,12 @@ function UpdateRotation(float DeltaTime, float maxPitch)
         if (Pawn != none && Pawn.Weapon != none && DHPwn != none)
         {
             ViewRotation = FreeAimHandler(ViewRotation, DeltaTime);
+        }
+
+        // Look directly at the look target
+        if (LookTarget != none)
+        {
+            ViewRotation = rotator(Normal(LookTarget.Location - (Pawn.Location + Pawn.EyePosition())));
         }
 
         if (DHPwn != none)
@@ -4480,25 +4488,22 @@ function bool GetCommandInteractionMenu(out string MenuClassName, out Object Men
     TraceEnd = TraceStart + (GetMaxViewDistance() * vector(Rotation));
     OtherPawn = Pawn(Trace(HitLocation, HitNormal, TraceEnd, TraceStart, true));
 
-    if (OtherPawn != none && OtherPawn.PlayerReplicationInfo != none)
+    if (OtherPawn != none && OtherPawn.GetTeamNum() == GetTeamNum())
     {
         OtherPRI = DHPlayerReplicationInfo(OtherPawn.PlayerReplicationInfo);
 
-        if (OtherPRI != none && OtherPRI.Team.TeamIndex == GetTeamNum())
+        MenuObject = OtherPawn;
+
+        if (class'DHPlayerReplicationInfo'.static.IsInSameSquad(PRI, OtherPRI))
         {
-            MenuObject = OtherPRI;
-
-            if (class'DHPlayerReplicationInfo'.static.IsInSameSquad(PRI, OtherPRI))
-            {
-                MenuClassName = "DH_Engine.DHCommandMenu_SquadManageMember";
-            }
-            else
-            {
-                MenuClassName = "DH_Engine.DHCommandMenu_SquadManageNonMember";
-            }
-
-            return true;
+            MenuClassName = "DH_Engine.DHCommandMenu_SquadManageMember";
         }
+        else
+        {
+            MenuClassName = "DH_Engine.DHCommandMenu_SquadManageNonMember";
+        }
+
+        return true;
     }
 
     MenuClassName = "DH_Engine.DHCommandMenu_SquadLeader";

@@ -361,11 +361,11 @@ function AddDeathMessage(PlayerReplicationInfo Killer, PlayerReplicationInfo Vic
     if (Killer != none && Killer != Victim)
     {
         O.KillerName = Killer.PlayerName;
-        O.KillerColor = class'DHColor'.default.TeamColors[Killer.Team.TeamIndex];
+        O.KillerColor = GetPlayerColor(Killer);
     }
 
     O.VictimName = Victim.PlayerName;
-    O.VictimColor = class'DHColor'.default.TeamColors[Victim.Team.TeamIndex];
+    O.VictimColor = GetPlayerColor(Victim);
     O.DamageType = DamageType;
 
     // If a suicide, team kill, or spawn kill then have the kill message display ASAP
@@ -1441,7 +1441,7 @@ function DrawVehicleIcon(Canvas Canvas, ROVehicle Vehicle, optional ROVehicleWea
     if (Vehicle.PlayerReplicationInfo != none)
     {
         Lines[0] = "1." @ Vehicle.PlayerReplicationInfo.PlayerName;
-        Colors[0] = GetPlayerColor(DHPlayerReplicationInfo(Vehicle.PlayerReplicationInfo));
+        Colors[0] = GetPlayerColor(Vehicle.PlayerReplicationInfo);
     }
 
     // Get passenger names & colors
@@ -1453,7 +1453,7 @@ function DrawVehicleIcon(Canvas Canvas, ROVehicle Vehicle, optional ROVehicleWea
         {
             //Lines[Lines.Length] = "" $ (i + 2) $ "." @ WP.PlayerReplicationInfo.PlayerName;
             Lines[Lines.Length] = (i + 2) $ "." @ WP.PlayerReplicationInfo.PlayerName;
-            Colors[Colors.Length] = GetPlayerColor(DHPlayerReplicationInfo(WP.PlayerReplicationInfo));
+            Colors[Colors.Length] = GetPlayerColor(WP.PlayerReplicationInfo);
         }
     }
 
@@ -1474,18 +1474,20 @@ function DrawVehicleIcon(Canvas Canvas, ROVehicle Vehicle, optional ROVehicleWea
     }
 }
 
-function color GetPlayerColor(DHPlayerReplicationInfo PRI)
+function color GetPlayerColor(PlayerReplicationInfo PRI)
 {
-    local DHPlayerReplicationInfo MyPRI;
+    local DHPlayerReplicationInfo MyPRI, OtherPRI;
+
+    OtherPRI = DHPlayerReplicationInfo(PRI);
 
     if (PlayerOwner != none)
     {
         MyPRI = DHPlayerReplicationInfo(PlayerOwner.PlayerReplicationInfo);
     }
 
-    if (class'DHPlayerReplicationInfo'.static.IsInSameSquad(MyPRI, PRI))
+    if (class'DHPlayerReplicationInfo'.static.IsInSameSquad(MyPRI, OtherPRI))
     {
-        if (PRI.IsSquadLeader())
+        if (OtherPRI.IsSquadLeader())
         {
             return class'DHColor'.default.SquadLeaderColor;
         }
