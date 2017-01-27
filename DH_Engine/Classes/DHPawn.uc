@@ -101,6 +101,9 @@ var     Pawn                FireStarter;                   // who set a player o
 var     class<LocalMessage> TouchMessageClass;
 var     float               LastNotifyTime;
 
+// Constriction
+var     DHConstructionProxy ConstructionProxy;
+
 replication
 {
     // Variables the server will replicate to clients when this actor is 1st replicated

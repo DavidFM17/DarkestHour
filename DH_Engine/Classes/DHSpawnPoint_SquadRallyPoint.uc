@@ -13,12 +13,14 @@ var int SpawnsRemaining;
 var int SpawnKillCount;
 var sound CreationSound;
 
+var int ConstructionRadiusInMeters;
+var int OverrunRadiusInMeters;
 var int EncroachmentRadiusInMeters;
 var int EncroachmentPenaltyBlockThreshold;
 var int EncroachmentPenaltyOverrunThreshold;
 var int EncroachmentPenaltyCounter;
 
-var int SecondsToEstablish;
+var int ConstructionCounter;
 
 replication
 {
@@ -39,8 +41,7 @@ function PostBeginPlay()
             Destroy();
         }
 
-        // TODO: figure out how far away this can be heard from
-        PlaySound(CreationSound, SLOT_None, 2.0,, 60.0,, true);
+        PlaySound(CreationSound, SLOT_None, 4.0,, 60.0,, true);
 
         SetTimer(1.0, true);
     }
@@ -48,29 +49,77 @@ function PostBeginPlay()
 
 auto state Constructing
 {
+    function Timer()
+    {
+        local int SquadmateCount;
+        local int EnemyCount;
+
+        GetPlayerCountsWithinRadius(default.ConstructionRadiusInMeters, SquadmateCount, EnemyCount);
+
+        if (EnemyCount > 0)
+        {
+            // Enemies are within the construction radius, start depleting the construction.
+            ConstructionCounter -= EnemyCount;
+        }
+        else if (SquadmateCount > 0)
+        {
+            ConstructionCounter += SquadmateCount;
+        }
+        else
+        {
+            // No one is around to construct, start depleting the construction
+            // counter.
+            ConstructionCounter -= 1;
+        }
+
+        if (ConstructionCounter >= 60) // TODO: remove magic number
+        {
+            GotoState('Active');
+        }
+        else if (ConstructionCounter <= 0)
+        {
+            // TODO: send overrun message?
+
+            Destroy();
+        }
+    }
+
 Begin:
-    Sleep(default.SecondsToEstablish);
-    GotoState('Active');
+SetTimer(1.0, true);
 }
 
 state Active
 {
     function Timer()
     {
+        local int OverrunningEnemiesCount;
         local int EncroachingEnemiesCount;
 
-        // TODO: destroy immediately if enemies are within a ~10m radius and are
-        // within eyeshot
-        // TODO: 3-strike rule for spawn kills on the rally point
+        GetPlayerCountsWithinRadius(default.OverrunRadiusInMeters,, OverrunningEnemiesCount);
 
-        EncroachingEnemiesCount = GetEncroachingEnemyCount();
+        // Destroy the rally point immediately if there are enemies within a
+        // very short distance.
+        if (OverrunningEnemiesCount >= 1)
+        {
+            // "A squad rally point has been overrun by enemies."
+            SRI.BroadcastLocalizedMessage(SRI.SquadMessageClass, 54);
+
+            Destroy();
+        }
+
+        // TODO: 3-strike rule for spawn kills on the rally point
+        GetPlayerCountsWithinRadius(default.EncroachmentRadiusInMeters,, EncroachingEnemiesCount);
 
         if (EncroachingEnemiesCount > 0)
         {
+            // There are enemies nearby, so increase the encroachment penalty
+            // counter by the number of nearby enemies.
             EncroachmentPenaltyCounter += EncroachingEnemiesCount;
         }
         else
         {
+            // There are no enemies nearby, decrease the penalty timer by the
+            // amount of nearby friendlies.
             EncroachmentPenaltyCounter -= 2;    // TODO; get rid of magic number
         }
 
@@ -82,6 +131,8 @@ state Active
         }
         else if (EncroachmentPenaltyCounter < default.EncroachmentPenaltyOverrunThreshold)
         {
+            // The encoruachment penalty counter has reached a point where we
+            // are now blocking the spawn from being used until enemies
             BlockReason = SPBR_EnemiesNearby;
         }
         else
@@ -91,6 +142,12 @@ state Active
 
             Destroy();
         }
+
+        // TODO: we need a way to 'reactivate' the previous squad rally point if
+        // this one is blocked.
+        if (IsBlocked())
+        {
+        }
     }
 
     event BeginState()
@@ -99,8 +156,6 @@ state Active
 
         // "The squad has established a new rally point."
         SRI.BroadcastSquadLocalizedMessage(TeamIndex, SquadIndex, SRI.SquadMessageClass, 44);
-
-        // TODO: need to
     }
 }
 
@@ -125,20 +180,30 @@ simulated function bool CanSpawnWithParameters(DHGameReplicationInfo GRI, int Te
 }
 
 
-function int GetEncroachingEnemyCount()
+function GetPlayerCountsWithinRadius(float RadiusInMeters, optional out int SquadmateCount, optional out int EnemyCount)
 {
-    local int i;
     local Pawn P;
+    local DHPlayerReplicationInfo OtherPRI;
 
-    foreach RadiusActors(class'Pawn', P, class'DHUnits'.static.MetersToUnreal(default.EncroachmentRadiusInMeters))
+    foreach RadiusActors(class'Pawn', P, class'DHUnits'.static.MetersToUnreal(RadiusInMeters))
     {
-        if (P != none && !P.bDeleteMe && P.Health > 0 && P.PlayerReplicationInfo != none && P.GetTeamNum() != TeamIndex)
+        if (P != none && !P.bDeleteMe && P.Health > 0 && P.PlayerReplicationInfo != none)
         {
-            i += 1;
+            if (P.GetTeamNum() == TeamIndex)
+            {
+                OtherPRI = DHPlayerReplicationInfo(P.PlayerReplicationInfo);
+
+                if (OtherPRI != none && OtherPRI.SquadIndex == SquadIndex)
+                {
+                    SquadmateCount += 1;
+                }
+            }
+            else
+            {
+                EnemyCount += 1;
+            }
         }
     }
-
-    return i;
 }
 
 function GetSpawnPosition(out vector SpawnLocation, out rotator SpawnRotation, int VehiclePoolIndex)
@@ -224,9 +289,10 @@ defaultproperties
     SpawnsRemaining=9
     SpawnKillCount=0
     CreationSound=Sound'Inf_Player.Gibimpact.Gibimpact'
-    SecondsToEstablish=30
     EncroachmentRadiusInMeters=25
     EncroachmentPenaltyBlockThreshold=10
     EncroachmentPenaltyOverrunThreshold=30
+    OverrunRadiusInMeters=10
+    ConstructionRadiusInMeters=25
 }
 

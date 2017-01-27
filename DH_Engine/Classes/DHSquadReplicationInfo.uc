@@ -50,7 +50,7 @@ enum ESquadSignalType
 };
 
 // This nightmare is necessary because UnrealScript cannot replicate structs
-// of a reasonable size.
+// of any reasonable size.
 var private DHPlayerReplicationInfo AxisMembers[TEAM_SQUAD_MEMBERS_MAX];
 var private string                  AxisNames[TEAM_SQUADS_MAX];
 var private byte                    AxisLocked[TEAM_SQUADS_MAX];
@@ -76,6 +76,8 @@ var globalconfig private int        AlliesSquadSize;
 var class<LocalMessage>             SquadMessageClass;
 
 var TreeMap_Object_float            InvitationExpirations;
+
+var int                             NextRallyPointInterval;
 
 replication
 {
@@ -1424,11 +1426,11 @@ function DHSpawnPoint_SquadRallyPoint SpawnRallyPoint(DHPlayer PC)
 
     RallyPoints[RallyPointIndex] = RP;
 
+    // TODO: change this message to reflect new functionality
     // "A squad rally point will be established in {0} seconds."
-    PC.ReceiveLocalizedMessage(SquadMessageClass, class'UInteger'.static.FromShorts(48, RP.SecondsToEstablish));
+    PC.ReceiveLocalizedMessage(SquadMessageClass, 48);
 
-    // TODO: remove magic number
-    SetSquadNextRallyPointTime(RP.TeamIndex, RP.SquadIndex, Level.TimeSeconds + 120);
+    SetSquadNextRallyPointTime(RP.TeamIndex, RP.SquadIndex, Level.TimeSeconds + default.NextRallyPointInterval);
 
     return RP;
 }
@@ -1454,4 +1456,5 @@ defaultproperties
     AxisDefaultSquadNames(6)="Gustav"
     AxisDefaultSquadNames(7)="Heinrich"
     SquadMessageClass=class'DHSquadMessage'
+    NextRallyPointInterval=120
 }
