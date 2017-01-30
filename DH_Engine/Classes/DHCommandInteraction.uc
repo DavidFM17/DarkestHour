@@ -128,7 +128,6 @@ state FadeOut
 
         if (MenuAlpha == 0.0)
         {
-            // TODO: run 'pop' on all menus, probably
             while (!Menus.IsEmpty())
             {
                 PopMenu();

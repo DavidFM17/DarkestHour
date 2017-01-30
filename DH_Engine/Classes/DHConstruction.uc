@@ -25,18 +25,8 @@ struct ConstructionStage
     var Emitter Emitter;
 };
 
-struct DestructionStage
-{
-    var int Health;
-    var StaticMesh StaticMesh;
-    var sound Sound;
-    var Emitter Emitter;
-};
-
-
 var int StageIndex;
 var array<ConstructionStage> ConstructionStages;
-var array<DestructionStage> DestructionStages;
 
 auto state Constructing
 {
@@ -68,6 +58,7 @@ state Constructed
 defaultproperties
 {
     DrawType=DT_StaticMesh
+    StaticMesh=StaticMesh'DH_Military_stc.Defences.hedgehog'
     ConstructionStages(0)=(Health=0,StaticMesh=none,Sound=none,Emitter=none)
     HealthMax=100
 }

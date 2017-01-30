@@ -5,13 +5,13 @@
 
 class DHConstructionProxy extends Actor;
 
+var DHPawn                  Pawn;
 var class<DHConstruction>   ConstructionClass;
 
 function SetConstructionClass(class<DHConstruction> ConstructionClass)
 {
     self.ConstructionClass = ConstructionClass;
 
-    SetStaticMesh(ConstructionClass.default.StaticMesh);
 
     // set all skins to simple color skin.
 }

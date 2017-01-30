@@ -91,6 +91,9 @@ struct SquadSignal
 
 var     SquadSignal             SquadSignals[2];
 
+// Construction
+var     DHConstructionProxy     ConstructionProxy;
+
 replication
 {
     // Variables the server will replicate to the client that owns this actor
@@ -1879,6 +1882,7 @@ function ClientToggleDuck()
 // Instead we let WVP's clientside IncrementRange() check that it's a valid operation before sending server call
 exec function LeanRight()
 {
+    // TODO: if IsPlacingConstruction, rotate the construction proxy
     if (ROPawn(Pawn) != none)
     {
         if (!Pawn.bBipodDeployed)
