@@ -1901,6 +1901,11 @@ function Killed(Controller Killer, Controller Killed, Pawn KilledPawn, class<Dam
 
             // Allow the player to spawn a vehicle right away
             DHP.NextVehicleSpawnTime = DHP.LastKilledTime + SPAWN_KILL_RESPAWN_TIME;
+
+            if (KPawn.SpawnPoint != none)
+            {
+                KPawn.SpawnPoint.OnSpawnKill(KPawn, Killer);
+            }
         }
 
         BroadcastDeathMessage(Killer, Killed, DamageType);

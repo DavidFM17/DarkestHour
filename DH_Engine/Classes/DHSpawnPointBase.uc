@@ -51,6 +51,9 @@ simulated event PostBeginPlay()
 
 function bool PerformSpawn(DHPlayer PC);
 
+// Called when a pawn is spawn killed from this spawn point. Override in child classes.
+function OnSpawnKill(Pawn VictimPawn, Controller KillerController);
+
 simulated function bool CanSpawnVehicle(DHGameReplicationInfo GRI, int VehiclePoolIndex);
 
 simulated function bool CanSpawnRole(DHRoleInfo RI)

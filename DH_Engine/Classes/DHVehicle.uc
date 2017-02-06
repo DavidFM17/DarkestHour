@@ -127,6 +127,7 @@ var     Actor                     ResupplyAttachment;      // reference to any r
 
 // Spawning
 var     DHSpawnPoint_Vehicle    SpawnPointAttachment;
+var     DHSpawnPointBase        SpawnPoint;                 // The spawn point that was used to spawn this vehicle.
 
 // Debugging
 var     bool        bDebuggingText;

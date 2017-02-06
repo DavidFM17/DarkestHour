@@ -30,6 +30,7 @@ var localized string SquadRallyPointInMinefield;
 var localized string SquadRallyPointInWater;
 var localized string SquadRallyPointNotOnFoot;
 var localized string SquadRallyPointTooSoon;
+var localized string SquadRallyPointAbandoned;
 
 static function string GetString(optional int S, optional PlayerReplicationInfo RelatedPRI_1, optional PlayerReplicationInfo RelatedPRI_2, optional Object OptionalObject)
 {
@@ -89,6 +90,8 @@ static function string GetString(optional int S, optional PlayerReplicationInfo 
             return Repl(default.SquadRallyPointTooSoon, "{0}", ExtraValue);
         case 54:
             return default.SquadRallyPointOverrunMessage;
+        case 55:
+            return default.SquadRallyPointAbandoned;
         default:
             break;
     }
@@ -112,7 +115,7 @@ defaultproperties
     SquadLockedMessage="The squad has been locked."
     SquadUnlockedMessage="The squad has been unlocked."
     SquadCreatedMessage="You have created a squad."
-    SquadRallyPointActiveMessage="The squad has established a new rally point."
+    SquadRallyPointActiveMessage="Your squad has established a new rally point."
     SquadRallyPointTooCloseMessage="You cannot place a rally point so close to an existing one, you must be {0} meters further away."
     SquadRallyPointExhaustedMessage="A squad rally point has been exhausted."
     SquadRallyPointNeedSquadmateNearby="You must have at least one other squadmate nearby to create a squad rally point."
@@ -123,5 +126,6 @@ defaultproperties
     SquadRallyPointInWater="You cannot create a squad rally point in water."
     SquadRallyPointNotOnFoot="You must be on foot to create a rally point."
     SquadRallyPointTooSoon="You must wait {0} seconds until your squad can create another rally point."
+    SquadRallyPointAbandoned="A squad rally point failed to be established."
 }
 

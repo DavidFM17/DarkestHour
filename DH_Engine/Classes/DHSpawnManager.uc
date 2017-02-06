@@ -145,6 +145,8 @@ function Reset()
 function bool SpawnPlayer(DHPlayer PC)
 {
     local DHSpawnPointBase SP;
+    local bool bResult;
+    local DHPawn P;
 
     if (PC != none)
     {
@@ -152,7 +154,19 @@ function bool SpawnPlayer(DHPlayer PC)
 
         if (SP != none)
         {
-            return SP.PerformSpawn(PC);
+            bResult = SP.PerformSpawn(PC);
+
+            if (bResult)
+            {
+                P = DHPawn(PC.Pawn);
+
+                if (P != none)
+                {
+                    P.SpawnPoint = SP;
+                }
+            }
+
+            return bResult;
         }
     }
 
@@ -279,6 +293,7 @@ function ROVehicle SpawnVehicle(DHPlayer PC, vector SpawnLocation, rotator Spawn
         {
             DHVehicle(V).SpawnProtEnds = Level.TimeSeconds + Min(SPAWN_PROTECTION_TIME, SP.SpawnProtectionTime);
             DHVehicle(V).SpawnKillTimeEnds = Level.TimeSeconds + SP.SpawnProtectionTime;
+            DHVehicle(V).SpawnPoint = SP;
         }
 
         // Set spawn protection variables for the player that spawned the vehicle
@@ -286,6 +301,7 @@ function ROVehicle SpawnVehicle(DHPlayer PC, vector SpawnLocation, rotator Spawn
         {
             DHPawn(V.Driver).SpawnProtEnds = Level.TimeSeconds + Min(SPAWN_PROTECTION_TIME, SP.SpawnProtectionTime);
             DHPawn(V.Driver).SpawnKillTimeEnds = Level.TimeSeconds + SP.SpawnProtectionTime;
+            DHPawn(V.Driver).SpawnPoint = SP;
         }
 
         // Decrement reservation count
@@ -323,6 +339,11 @@ event VehicleDestroyed(Vehicle V)
         // Find out if the vehicle was spawned killed
         if (DHV.IsSpawnKillProtected())
         {
+            if (DHV.SpawnPoint != none)
+            {
+                DHV.SpawnPoint.OnSpawnKill(V, none);
+            }
+
             bWasSpawnKilled = true;
         }
 

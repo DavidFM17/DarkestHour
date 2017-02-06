@@ -6,21 +6,25 @@
 class DHSpawnPoint_SquadRallyPoint extends DHSpawnPointBase
     notplaceable;
 
-var DHSquadReplicationInfo SRI;
-var int SquadIndex;
-var int RallyPointIndex;
-var int SpawnsRemaining;
-var int SpawnKillCount;
-var sound CreationSound;
+var DHSquadReplicationInfo SRI;                 // Convenience variable to access the SquadReplicationInfo.
 
-var int ConstructionRadiusInMeters;
-var int OverrunRadiusInMeters;
-var int EncroachmentRadiusInMeters;
-var int EncroachmentPenaltyBlockThreshold;
-var int EncroachmentPenaltyOverrunThreshold;
-var int EncroachmentPenaltyCounter;
+var int SquadIndex;                             // The squad index of the squad that owns this rally point.
+var int RallyPointIndex;                        // The index into SRI.RallyPoints.
+var int SpawnsRemaining;                        // The amount of spawns remaining on the rally point.
+var sound CreationSound;                        // Sound that is played when the squad rally point is first placed.
 
-var int ConstructionCounter;
+var int ConstructionRadiusInMeters;             // The distance, in meters, that squadmates and enemies must be within to influence the ConstructionCounter.
+var int OverrunRadiusInMeters;                  // The distance, in meters, that enemies must be within to immediately overrun a rally point.
+var int EncroachmentRadiusInMeters;             // The distance, in meters, that enemies must be within to affect the EncroachmentPenaltyCounter
+var int EncroachmentPenaltyBlockThreshold;      // The value that EncroachmentPenaltyCounter must reach for the rally point to be "blocked".
+var int EncroachmentPenaltyOverrunThreshold;    // The value that EncroachmentPenaltyCounter must reach for the rally point to be "overrun".
+var int EncroachmentPenaltyCounter;             // Running counter of encroachment penalty.
+
+var float ConstructionCounter;                  // Running counter to keep track of construction status.
+var float ConstructionCounterThreshold;         // The value that ConstructionCounter must reach for the rally point to be "established".
+
+var float ConstructionStartTimeSeconds;         // The value of Level.TimeSeconds when this rally point began construction.
+var float OverrunMinimumTimeSeconds;            // The number of seconds a rally point must be "alive" for in order to be overrun by enemies. (To stop squad rally points being used as "enemy radar".
 
 replication
 {
@@ -54,58 +58,67 @@ auto state Constructing
         local int SquadmateCount;
         local int EnemyCount;
 
+        global.Timer();
+
         GetPlayerCountsWithinRadius(default.ConstructionRadiusInMeters, SquadmateCount, EnemyCount);
 
-        if (EnemyCount > 0)
+        ConstructionCounter -= EnemyCount;
+        ConstructionCounter += SquadmateCount;
+
+        if (SquadmateCount == 0 && EnemyCount == 0)
         {
-            // Enemies are within the construction radius, start depleting the construction.
-            ConstructionCounter -= EnemyCount;
-        }
-        else if (SquadmateCount > 0)
-        {
-            ConstructionCounter += SquadmateCount;
-        }
-        else
-        {
-            // No one is around to construct, start depleting the construction
-            // counter.
+            // No one is around to establish the rally point, start depleting the counter.
             ConstructionCounter -= 1;
         }
 
-        if (ConstructionCounter >= 60) // TODO: remove magic number
+        if (ConstructionCounter >= default.ConstructionCounterThreshold)
         {
+            // Rally point exceeded the construction counter threshold. This
+            // rally point is now established!
             GotoState('Active');
         }
         else if (ConstructionCounter <= 0)
         {
-            // TODO: send overrun message?
+            // Delay destruction of the rally point so it can't be used as enemy radar.
+            if (Level.TimeSeconds - ConstructionStartTimeSeconds > default.OverrunMinimumTimeSeconds)
+            {
+                // "A squad rally point failed to be established."
+                SRI.BroadcastLocalizedMessage(SRI.SquadMessageClass, 55);
 
-            Destroy();
+                Destroy();
+            }
         }
     }
 
 Begin:
+ConstructionStartTimeSeconds = Level.TimeSeconds;
 SetTimer(1.0, true);
+}
+
+function Timer()
+{
+    local int OverrunningEnemiesCount;
+
+    GetPlayerCountsWithinRadius(default.OverrunRadiusInMeters,, OverrunningEnemiesCount);
+
+    // Destroy the rally point immediately if there are enemies within a
+    // very short distance.
+    if (OverrunningEnemiesCount >= 1)
+    {
+        // "A squad rally point has been overrun by enemies."
+        SRI.BroadcastLocalizedMessage(SRI.SquadMessageClass, 54);
+
+        Destroy();
+    }
 }
 
 state Active
 {
     function Timer()
     {
-        local int OverrunningEnemiesCount;
         local int EncroachingEnemiesCount;
 
-        GetPlayerCountsWithinRadius(default.OverrunRadiusInMeters,, OverrunningEnemiesCount);
-
-        // Destroy the rally point immediately if there are enemies within a
-        // very short distance.
-        if (OverrunningEnemiesCount >= 1)
-        {
-            // "A squad rally point has been overrun by enemies."
-            SRI.BroadcastLocalizedMessage(SRI.SquadMessageClass, 54);
-
-            Destroy();
-        }
+        global.Timer();
 
         // TODO: 3-strike rule for spawn kills on the rally point
         GetPlayerCountsWithinRadius(default.EncroachmentRadiusInMeters,, EncroachingEnemiesCount);
@@ -131,8 +144,9 @@ state Active
         }
         else if (EncroachmentPenaltyCounter < default.EncroachmentPenaltyOverrunThreshold)
         {
-            // The encoruachment penalty counter has reached a point where we
-            // are now blocking the spawn from being used until enemies
+            // The encoroachment penalty counter has reached a point where we
+            // are now blocking the spawn from being used until enemies are
+            // cleared out.
             BlockReason = SPBR_EnemiesNearby;
         }
         else
@@ -279,6 +293,17 @@ function bool PerformSpawn(DHPlayer PC)
     return false;
 }
 
+function OnSpawnKill(Pawn VictimPawn, Controller KillerController)
+{
+    if (KillerController != none && KillerController.GetTeamNum() != TeamIndex)
+    {
+        // "A squad rally point has been overrun by enemies."
+        SRI.BroadcastSquadLocalizedMessage(TeamIndex, SquadIndex, SRI.SquadMessageClass, 54);
+
+        Destroy();
+    }
+}
+
 defaultproperties
 {
     StaticMesh=StaticMesh'DH_Military_stc.Parachute.Chute_pack'
@@ -287,12 +312,13 @@ defaultproperties
     SquadIndex=-1
     RallyPointIndex=-1
     SpawnsRemaining=9
-    SpawnKillCount=0
     CreationSound=Sound'Inf_Player.Gibimpact.Gibimpact'
     EncroachmentRadiusInMeters=25
     EncroachmentPenaltyBlockThreshold=10
     EncroachmentPenaltyOverrunThreshold=30
     OverrunRadiusInMeters=10
     ConstructionRadiusInMeters=25
+    ConstructionCounterThreshold=60
+    OverrunMinimumTimeSeconds=15
 }
 
