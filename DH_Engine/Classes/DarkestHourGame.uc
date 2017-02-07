@@ -4265,6 +4265,7 @@ function Pawn SpawnPawn(DHPlayer C, vector SpawnLocation, rotator SpawnRotation,
     {
         DHPawn(C.Pawn).SpawnProtEnds = Level.TimeSeconds + SP.SpawnProtectionTime;
         DHPawn(C.Pawn).SpawnKillTimeEnds = Level.TimeSeconds + SP.SpawnKillProtectionTime;
+        DHPawn(C.Pawn).SpawnPoint = SP;
     }
 
     AddDefaultInventory(C.Pawn);
