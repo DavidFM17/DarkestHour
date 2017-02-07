@@ -1266,6 +1266,8 @@ function DHSpawnPoint_SquadRallyPoint SpawnRallyPoint(DHPlayer PC)
     local DHMineVolume MineVolume;
     local PhysicsVolume PV;
     local int DistanceInMeters, SecondsToWait;
+    local DHPawnCollisionTest CT;
+    local vector L;
 
     if (PC == none)
     {
@@ -1275,7 +1277,7 @@ function DHSpawnPoint_SquadRallyPoint SpawnRallyPoint(DHPlayer PC)
     P = DHPawn(PC.Pawn);
 
     // Must be on foot as an infantryman
-    if (P == none)
+    if (P == none || P.Physics != PHYS_Walking)
     {
         // "You must be on foot to create a rally point."
         PC.ReceiveLocalizedMessage(SquadMessageClass, 52);
@@ -1344,11 +1346,25 @@ function DHSpawnPoint_SquadRallyPoint SpawnRallyPoint(DHPlayer PC)
         }
     }
 
-    // Must be reasonably close to solid ground (~2 meters)
+    // Must be reasonably close to solid ground
     if (P.Trace(HitLocation, HitNormal, P.Location - vect(0, 0, 128.0), P.Location, false) == none)
     {
         return none;
     }
+
+    L = HitLocation;
+    L.Z += class'DHPawn'.default.CollisionHeight / 2;
+
+    CT = Spawn(class'DHPawnCollisionTest',,, L);
+
+    if (CT == none)
+    {
+        PC.ReceiveLocalizedMessage(SquadMessageClass, 56);
+
+        return none;
+    }
+
+    CT.Destroy();
 
     foreach P.TouchingActors(class'DHMineVolume', MineVolume)
     {
