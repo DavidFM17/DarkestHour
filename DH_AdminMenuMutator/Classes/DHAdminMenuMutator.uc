@@ -459,7 +459,7 @@ function SwitchPlayer(string PlayerName, string TeamName, string RoleName, strin
 
         for (i = 0; i < arraycount(DHGRI.SpawnPoints); ++i)
         {
-            if (DHGRI.GetSpawnPoint(i) != none && DHGRI.GetSpawnPoint(i).CanSpawn(TeamIndex, RoleIndex, SquadIndex, VehiclePoolIndex))
+            if (DHGRI.GetSpawnPoint(i) != none && DHGRI.GetSpawnPoint(i).CanSpawnWithParameters(DHGRI, TeamIndex, RoleIndex, -1, -1))
             {
                 PlayerToSwitch.ServerSetPlayerInfo(255, 255, 0, 0, i , -1);
                 break;
