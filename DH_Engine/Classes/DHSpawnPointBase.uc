@@ -158,5 +158,6 @@ defaultproperties
     bAlwaysRelevant=true
     RemoteRole=ROLE_SimulatedProxy
     bIsActive=false
+    bHidden=true
 }
 

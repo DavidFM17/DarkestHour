@@ -37,7 +37,11 @@ function OnPop()
 
 function bool ShouldHideMenu()
 {
-    return MenuObject == none;
+    local Pawn P;
+
+    P = Pawn(MenuObject);
+
+    return P == none || P.bDeleteMe || P.Health <= 0;
 }
 
 function bool OnSelect(DHCommandInteraction Interaction, int Index, vector Location)

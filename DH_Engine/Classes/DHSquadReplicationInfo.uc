@@ -1349,6 +1349,9 @@ function DHSpawnPoint_SquadRallyPoint SpawnRallyPoint(DHPlayer PC)
     // Must be reasonably close to solid ground
     if (P.Trace(HitLocation, HitNormal, P.Location - vect(0, 0, 128.0), P.Location, false) == none)
     {
+        // "You cannot create a squad rally point at this location."
+        PC.ReceiveLocalizedMessage(SquadMessageClass, 56);
+
         return none;
     }
 
@@ -1359,6 +1362,7 @@ function DHSpawnPoint_SquadRallyPoint SpawnRallyPoint(DHPlayer PC)
 
     if (CT == none)
     {
+        // "You cannot create a squad rally point at this location."
         PC.ReceiveLocalizedMessage(SquadMessageClass, 56);
 
         return none;

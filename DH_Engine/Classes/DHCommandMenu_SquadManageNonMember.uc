@@ -37,36 +37,42 @@ function OnPop()
 
 function bool ShouldHideMenu()
 {
-    return MenuObject == none;
+    local Pawn P;
+
+    P = Pawn(MenuObject);
+
+    return P == none || P.bDeleteMe || P.Health <= 0;
 }
 
 function bool OnSelect(DHCommandInteraction Interaction, int Index, vector Location)
 {
     local DHPlayer PC;
-    local DHPlayerReplicationInfo PRI, OtherPRI;
+    local DHPawn P;
+    local DHPlayerReplicationInfo OtherPRI;
 
     if (Interaction == none || Interaction.ViewportOwner == none || Index < 0 || Index >= Options.Length)
     {
         return false;
     }
 
-    OtherPRI = DHPlayerReplicationInfo(MenuObject);
+    P = Pawn(MenuObject);
+
+    if (P != none)
+    {
+        OtherPRI = DHPlayerReplicationInfo(P.PlayerReplicationInfo);
+    }
+
     PC = DHPlayer(Interaction.ViewportOwner.Actor);
 
     if (PC != none && OtherPRI != none)
     {
-        PRI = DHPlayerReplicationInfo(PC.PlayerReplicationInfo);
-
-        if (PRI != none)
+        switch (Index)
         {
-            switch (Index)
-            {
-                case 0: // Invite
-                    PC.ServerSquadInvite(OtherPRI);
-                    break;
-                default:
-                    break;
-            }
+            case 0: // Invite
+                PC.ServerSquadInvite(OtherPRI);
+                break;
+            default:
+                break;
         }
     }
 

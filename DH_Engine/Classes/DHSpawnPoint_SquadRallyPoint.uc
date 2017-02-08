@@ -320,5 +320,6 @@ defaultproperties
     ConstructionRadiusInMeters=25
     ConstructionCounterThreshold=60
     OverrunMinimumTimeSeconds=15
+    bHidden=false
 }
 
