@@ -47,7 +47,7 @@ function bool ShouldHideMenu()
 function bool OnSelect(DHCommandInteraction Interaction, int Index, vector Location)
 {
     local DHPlayer PC;
-    local DHPawn P;
+    local Pawn P;
     local DHPlayerReplicationInfo OtherPRI;
 
     if (Interaction == none || Interaction.ViewportOwner == none || Index < 0 || Index >= Options.Length)
