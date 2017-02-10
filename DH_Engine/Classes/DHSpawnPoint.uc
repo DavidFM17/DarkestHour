@@ -126,20 +126,8 @@ simulated function bool CanSpawnWithParameters(DHGameReplicationInfo GRI, int Te
     local class<ROVehicle>  VehicleClass;
     local DHRoleInfo        RI;
 
-    if (VehiclePoolIndex != -1)
-    {
-        Log("========================================");
-        Log("GRI" @ GRI);
-        Log("TeamIndex" @ TeamIndex);
-        Log("RoleIndex" @ RoleIndex);
-        Log("SquadIndex" @ SquadIndex);
-        Log("VehiclePoolIndex" @ VehiclePoolIndex);
-    }
-
     if (!super.CanSpawnWithParameters(GRI, TeamIndex, RoleIndex, SquadIndex, VehiclePoolIndex))
     {
-        Log("A");
-
         return false;
     }
 
@@ -148,13 +136,11 @@ simulated function bool CanSpawnWithParameters(DHGameReplicationInfo GRI, int Te
 
     if (RI == none)
     {
-        Log("B");
         return false;
     }
 
     if (RI.default.bCanUseMortars && CanSpawnMortars())
     {
-        Log("C");
         return true;
     }
 
@@ -164,11 +150,6 @@ simulated function bool CanSpawnWithParameters(DHGameReplicationInfo GRI, int Te
     }
     else
     {
-        Log("D");
-        Log("CanSpawnInfantryVehicles" @ CanSpawnInfantryVehicles());
-        Log("RI.default.bCanBeTankCrew" @ RI.default.bCanBeTankCrew);
-        Log("CanSpawnVehicle(VehiclePoolIndex)" @ CanSpawnVehicle(GRI, VehiclePoolIndex));
-
         return CanSpawnInfantryVehicles() || (RI.default.bCanBeTankCrew && CanSpawnVehicle(GRI, VehiclePoolIndex));
     }
 }
