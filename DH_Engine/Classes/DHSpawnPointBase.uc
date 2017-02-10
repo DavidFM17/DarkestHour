@@ -44,23 +44,34 @@ simulated event PostBeginPlay()
 
     if (Role == ROLE_Authority)
     {
+        // Add this spawn point to the GRI's list of spawn points.
         GRI = DHGameReplicationInfo(Level.Game.GameReplicationInfo);
-        GRI.AddSpawnPoint(self);
+
+        SpawnPointIndex = GRI.AddSpawnPoint(self);
+
+        if (SpawnPointIndex == -1)
+        {
+            Error("Failed to add" @ self @ "to spawn point list!");
+        }
     }
 }
 
+// Override to provide the business logic that does the spawning.
 function bool PerformSpawn(DHPlayer PC);
 
 // Called when a pawn is spawn killed from this spawn point. Override in child classes.
 function OnSpawnKill(Pawn VictimPawn, Controller KillerController);
 
+// Override to specify which vehicles can spawn at this spawn point.
 simulated function bool CanSpawnVehicle(DHGameReplicationInfo GRI, int VehiclePoolIndex);
 
+// Override to limit certain roles from using this spawn point.
 simulated function bool CanSpawnRole(DHRoleInfo RI)
 {
     return RI != none;
 }
 
+// Override to specify a different spawn pose, otherwise it just uses the spawn point's pose.
 function GetSpawnPosition(out vector SpawnLocation, out rotator SpawnRotation, int VehiclePoolIndex)
 {
     SpawnLocation = Location;
@@ -123,6 +134,7 @@ function SetIsActive(bool bIsActive)
 
     if (!bIsActive)
     {
+        // Invalidate spawns, if necessary.
         for (C = Level.ControllerList; C != none; C = C.NextController)
         {
             PC = DHPlayer(C);
@@ -136,6 +148,7 @@ function SetIsActive(bool bIsActive)
     }
 }
 
+// Override to change the button style for display on the deploy menu.
 simulated function string GetStyleName()
 {
     if (IsBlocked())
@@ -147,8 +160,6 @@ simulated function string GetStyleName()
         return "DHSpawnButtonStyle";
     }
 }
-
-function OnSpawn();
 
 defaultproperties
 {
