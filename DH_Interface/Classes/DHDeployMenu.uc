@@ -428,7 +428,6 @@ function UpdateSpawnPoints()
         {
             GetMapCoords(GRI.SpawnPoints[i].Location, X, Y, p_Map.b_SpawnPoints[i].WinWidth, p_Map.b_SpawnPoints[i].WinHeight);
 
-            p_Map.b_SpawnPoints[i].Tag = i;
             p_Map.b_SpawnPoints[i].SetPosition(X, Y, p_Map.b_SpawnPoints[i].WinWidth, p_Map.b_SpawnPoints[i].WinHeight, true);
             p_Map.b_SpawnPoints[i].SetVisibility(true);
 
@@ -438,7 +437,7 @@ function UpdateSpawnPoints()
             }
             else
             {
-                if (SpawnPointIndex == p_Map.b_SpawnPoints[i].Tag)
+                if (SpawnPointIndex != -1 && SpawnPointIndex == p_Map.b_SpawnPoints[i].Tag)
                 {
                     p_Map.SelectSpawnPoint(-1);
                 }
@@ -454,7 +453,7 @@ function UpdateSpawnPoints()
             // deselect it.
             p_Map.b_SpawnPoints[i].SetVisibility(false);
 
-            if (SpawnPointIndex == p_Map.b_SpawnPoints[i].Tag)
+            if (SpawnPointIndex != -1 && SpawnPointIndex == p_Map.b_SpawnPoints[i].Tag)
             {
                 p_Map.SelectSpawnPoint(-1);
             }

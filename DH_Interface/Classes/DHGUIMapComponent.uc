@@ -30,6 +30,7 @@ function InitComponent(GUIController MyController, GUIComponent MyOwner)
 
     for (i = 0; i < arraycount(b_SpawnPoints); ++i)
     {
+        b_SpawnPoints[i].Tag = i;
         b_SpawnPoints[i].ContextMenu.Tag = i;
         b_SpawnPoints[i].ContextMenu.OnOpen = MyContextOpen;
         b_SpawnPoints[i].ContextMenu.OnClose = MyContextClose;
@@ -86,8 +87,16 @@ function SelectSpawnPoint(int SpawnPointIndex)
 {
     local int i;
 
+    Log("SelectSpawnPoint(" $ SpawnPointIndex $ ")");
+
     for (i = 0; i < arraycount(b_SpawnPoints); ++i)
     {
+        if (i == SpawnPointIndex)
+        {
+            Log("b_SpawnPoints[" $ i $ "]" @ b_SpawnPoints[i]);
+            Log("Tag" @ b_SpawnPoints[i].Tag);
+        }
+
         b_SpawnPoints[i].SetChecked(b_SpawnPoints[i].Tag != -1 && b_SpawnPoints[i].Tag == SpawnPointIndex);
     }
 
