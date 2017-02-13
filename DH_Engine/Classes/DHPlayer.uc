@@ -4486,7 +4486,7 @@ exec function ShowOrderMenu()
 
 function bool GetCommandInteractionMenu(out string MenuClassName, out Object MenuObject)
 {
-    local Pawn OtherPawn;
+    local DHPawn OtherPawn;
     local DHPlayerReplicationInfo PRI, OtherPRI;
     local vector TraceStart, TraceEnd, HitLocation, HitNormal;
 
@@ -4500,7 +4500,7 @@ function bool GetCommandInteractionMenu(out string MenuClassName, out Object Men
     // Trace out into the world and find a pawn we are looking at.
     TraceStart = Pawn.Location + Pawn.EyePosition();
     TraceEnd = TraceStart + (GetMaxViewDistance() * vector(Rotation));
-    OtherPawn = Pawn(Trace(HitLocation, HitNormal, TraceEnd, TraceStart, true));
+    OtherPawn = DHPawn(Trace(HitLocation, HitNormal, TraceEnd, TraceStart, true));
 
     if (OtherPawn != none && OtherPawn.GetTeamNum() == GetTeamNum())
     {
