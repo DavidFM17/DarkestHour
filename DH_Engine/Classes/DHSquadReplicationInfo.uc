@@ -1272,6 +1272,7 @@ function DHSpawnPoint_SquadRallyPoint SpawnRallyPoint(DHPlayer PC)
     local int DistanceInMeters, SecondsToWait;
     local DHPawnCollisionTest CT;
     local vector L;
+    local DHRestrictionVolume RV;
 
     if (PC == none)
     {
@@ -1345,6 +1346,17 @@ function DHSpawnPoint_SquadRallyPoint SpawnRallyPoint(DHPlayer PC)
         {
             // "You must have at least one other squadmate nearby to establish a rally point."
             PC.ReceiveLocalizedMessage(SquadMessageClass, 47);
+
+            return none;
+        }
+    }
+
+    foreach P.TouchingActors(class'DHRestrictionVolume', RV)
+    {
+        if (RV != none && RV.bNoSquadRallyPoints)
+        {
+            // "You cannot create a squad rally point at this location."
+            PC.ReceiveLocalizedMessage(SquadMessageClass, 56);
 
             return none;
         }
