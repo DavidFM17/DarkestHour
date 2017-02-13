@@ -1320,6 +1320,7 @@ function DHSpawnPoint_SquadRallyPoint SpawnRallyPoint(DHPlayer PC)
             {
                 // "You must be an additional {0} meters away from your squad's other  point."
                 PC.ReceiveLocalizedMessage(SquadMessageClass, class'UInteger'.static.FromShorts(45, RALLY_POINT_RADIUS_IN_METERS - DistanceInMeters));
+
                 return none;
             }
         }
@@ -1471,12 +1472,7 @@ function DHSpawnPoint_SquadRallyPoint SpawnRallyPoint(DHPlayer PC)
 
 function DestroySquadRallyPoint(DHPlayerReplicationInfo PRI, DHSpawnPoint_SquadRallyPoint SRP)
 {
-    if (PRI == none || SRP == none)
-    {
-        return;
-    }
-
-    if (!PRI.IsSquadLeader() || PRI.Team.TeamIndex != SRP.TeamIndex || PRI.SquadIndex != SRP.SquadIndex || !SRP.IsActive())
+    if (PRI == none || SRP == none || !PRI.IsSquadLeader() || PRI.Team.TeamIndex != SRP.TeamIndex || PRI.SquadIndex != SRP.SquadIndex || !SRP.IsActive())
     {
         return;
     }
