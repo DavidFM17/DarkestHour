@@ -357,6 +357,10 @@ function int CreateSquad(DHPlayerReplicationInfo PRI, optional string Name)
             // Unlock the squad.
             SetSquadLockedInternal(TeamIndex, i, false);
 
+            // Have a slight delay in placing rally points to dissuade players
+            // from trying to exploit the system.
+            SetSquadNextRallyPointTime(TeamIndex, i, Level.TimeSeconds + 15.0);
+
             return i;
         }
     }
