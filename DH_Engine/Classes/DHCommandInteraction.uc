@@ -216,6 +216,8 @@ function PostRender(Canvas C)
     C.DrawColor = class'UColor'.default.White;
     C.DrawTile(material'DH_InterfaceArt_tex.Communication.menu_crosshair', 16, 16, 0, 0, 16, 16);
 
+    C.Font = class'DHHud'.static.GetSmallMenuFont(C);
+
     Menu = DHCommandMenu(Menus.Peek());
 
     Theta -= class'UUnits'.static.DegreesToRadians(90);
