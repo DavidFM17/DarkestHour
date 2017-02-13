@@ -304,9 +304,21 @@ function OnSpawnKill(Pawn VictimPawn, Controller KillerController)
     }
 }
 
+function string GetStyleName()
+{
+    if (IsBlocked())
+    {
+        return "DHRallyPointBlockedButtonStyle";
+    }
+    else
+    {
+        return "DHRallyPointButtonStyle";
+    }
+}
+
 defaultproperties
 {
-    StaticMesh=StaticMesh'DH_Military_stc.Parachute.Chute_pack'
+    StaticMesh=StaticMesh'DH_Military_stc.Parachute.Chute_pack' // TODO: replace with custom made one
     DrawType=DT_StaticMesh
     TeamIndex=-1
     SquadIndex=-1

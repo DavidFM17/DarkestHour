@@ -184,6 +184,7 @@ defaultproperties
     DefaultStyleNames(90)="DH_Interface.DHStyle_ServerBrowserGridRed"
     DefaultStyleNames(91)="DH_Interface.DHStyle_RallyPointButton"
     DefaultStyleNames(92)="DH_Interface.DHStyle_SpawnPointBlockedButton"
+    DefaultStyleNames(93)="DH_Interface.DHStyle_RallyPointBlockedButton"
     RequestDataMenu="DH_Interface.DHGetDataMenu"
     DynArrayPropertyMenu="DH_Interface.DHGUIDynArrayPage"
     FilterMenu="DH_Interface.DHFilterListPage"

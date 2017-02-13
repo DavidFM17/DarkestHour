@@ -583,7 +583,6 @@ function int JoinSquadAuto(DHPlayerReplicationInfo PRI)
 {
     local int i, SquadIndex, MaxMemberCount, MemberCount;
 
-    // TODO: make sure player is not already in a squad
     if (PRI == none || PRI.Team == none || PRI.IsInSquad())
     {
         return -1;
@@ -1462,8 +1461,7 @@ function DHSpawnPoint_SquadRallyPoint SpawnRallyPoint(DHPlayer PC)
 
     RallyPoints[RallyPointIndex] = RP;
 
-    // TODO: change this message to reflect new functionality
-    // "A squad rally point will be established in {0} seconds."
+    // "You have create a squad rally point. Secure the area with your squad to establish this rally point."
     PC.ReceiveLocalizedMessage(SquadMessageClass, 48);
 
     SetSquadNextRallyPointTime(RP.TeamIndex, RP.SquadIndex, Level.TimeSeconds + default.NextRallyPointInterval);

@@ -36,17 +36,17 @@ defaultproperties
     ImgStyle(3)=ISTY_Scaled
     ImgStyle(4)=ISTY_Scaled
 
-    Images(0)=material'DH_GUI_Tex.DeployMenu.SpawnVehicle'
-    Images(1)=material'DH_GUI_Tex.DeployMenu.SpawnVehicle'
-    Images(2)=material'DH_GUI_Tex.DeployMenu.SpawnVehicle'
-    Images(3)=material'DH_GUI_Tex.DeployMenu.SpawnVehicle'
-    Images(4)=material'DH_GUI_Tex.DeployMenu.SpawnVehicle'
+    Images(0)=material'DH_GUI_Tex.DeployMenu.RallyPoint_Osc'
+    Images(1)=material'DH_GUI_Tex.DeployMenu.RallyPoint_Osc'
+    Images(2)=material'DH_GUI_Tex.DeployMenu.RallyPoint_Osc'
+    Images(3)=material'DH_GUI_Tex.DeployMenu.RallyPointDiffuse'
+    Images(4)=material'DH_GUI_Tex.DeployMenu.RallyPointDiffuse'
 
-    ImgColors(0)=(R=124,G=252,B=0,A=255)
-    ImgColors(1)=(R=124,G=252,B=0,A=255)
-    ImgColors(2)=(R=124,G=252,B=0,A=255)
-    ImgColors(3)=(R=124,G=252,B=0,A=255)
-    ImgColors(4)=(R=252,G=124,B=0,A=255)
+    ImgColors(0)=(R=255,G=255,B=255,A=255)
+    ImgColors(1)=(R=255,G=255,B=255,A=255)
+    ImgColors(2)=(R=255,G=255,B=255,A=255)
+    ImgColors(3)=(R=255,G=255,B=255,A=255)
+    ImgColors(4)=(R=255,G=255,B=255,A=255)
 
     BorderOffsets(0)=0
     BorderOffsets(1)=0
