@@ -124,11 +124,19 @@ function bool IsActive()
     return bIsActive;
 }
 
+event Destroyed()
+{
+    super.Destroyed();
+
+    // We call this so that players' spawns get invalidated if they are set
+    // to spawn on this spawn point.
+    SetIsActive(false);
+}
+
 function SetIsActive(bool bIsActive)
 {
     local Controller C;
     local DHPlayer PC;
-
 
     self.bIsActive = bIsActive;
 

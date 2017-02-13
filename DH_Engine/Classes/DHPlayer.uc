@@ -115,7 +115,7 @@ replication
         ServerSquadCreate, ServerSquadLeave, ServerSquadJoin, ServerSquadSay,
         SeverSquadJoinAuto, ServerSquadInvite, ServerSquadKick, ServerSquadPromote,
         ServerSquadCommandeer, ServerSquadLock, ServerSquadOrder, ServerSquadSignal,
-        ServerSquadRename, ServerSquadSpawnRallyPoint;
+        ServerSquadRename, ServerSquadSpawnRallyPoint, ServerSquadDestroyRallyPoint;
 
     // Functions the server can call on the client that owns this actor
     reliable if (Role == ROLE_Authority)
@@ -4414,6 +4414,18 @@ function ServerSquadSpawnRallyPoint()
     if (SquadReplicationInfo != none)
     {
         SquadReplicationInfo.SpawnRallyPoint(self);
+    }
+}
+
+function ServerSquadDestroyRallyPoint(DHSpawnPoint_SquadRallyPoint SRP)
+{
+    local DHPlayerReplicationInfo PRI;
+
+    PRI = DHPlayerReplicationInfo(PlayerReplicationInfo);
+
+    if (SquadReplicationInfo != none)
+    {
+        SquadReplicationInfo.DestroySquadRallyPoint(PRI, SRP);
     }
 }
 

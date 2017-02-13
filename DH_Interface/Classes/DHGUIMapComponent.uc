@@ -14,16 +14,36 @@ var automated   DHGUICheckBoxButton         b_SpawnPoints[SPAWN_POINTS_MAX];
 var             DHHud                       MyHud;
 var             DHGameReplicationInfo       GRI;
 var             DHPlayer                    PC;
+var             DHPlayerReplicationInfo     PRI;
+
+var             GUIContextMenu              SquadRallyPointContextMenu;
 
 delegate OnSpawnPointChanged(int SpawnPointIndex, optional bool bDoubleClick);
 
 function InitComponent(GUIController MyController, GUIComponent MyOwner)
 {
+    local int i;
+
     super.InitComponent(MyController, MyOwner);
 
     PC = DHPlayer(PlayerOwner());
 
+    for (i = 0; i < arraycount(b_SpawnPoints); ++i)
+    {
+        b_SpawnPoints[i].ContextMenu.Tag = i;
+        b_SpawnPoints[i].ContextMenu.OnOpen = MyContextOpen;
+        b_SpawnPoints[i].ContextMenu.OnClose = MyContextClose;
+        b_SpawnPoints[i].ContextMenu.OnSelect = MyContextSelect;
+    }
+
     if (PC == none)
+    {
+        return;
+    }
+
+    PRI = DHPlayerReplicationInfo(PC.PlayerReplicationInfo);
+
+    if (PRI == none)
     {
         return;
     }
@@ -57,7 +77,7 @@ function bool InternalOnDraw(Canvas C)
     SubCoords.Width = ActualWidth();
     SubCoords.Height = ActualHeight();
 
-    DHHud(PlayerOwner().myHUD).DrawMap(C, SubCoords, PC);
+    MyHud.DrawMap(C, SubCoords, PC);
 
     return false;
 }
@@ -113,26 +133,62 @@ function bool OnDblClick(GUIComponent Sender)
     return false;
 }
 
-function bool MyContextOpen(GUIContextMenu Menu)
+function bool MyContextOpen(GUIContextMenu Sender)
 {
-    //return HandleContextMenuOpen(List, Menu, Menu.MenuOwner);
-    return false;
+    local DHSpawnPoint_SquadRallyPoint SRP;
+
+    if (PRI == none || !PRI.IsSquadLeader())
+    {
+        return false;
+    }
+
+    if (GRI != none)
+    {
+        SRP = DHSpawnPoint_SquadRallyPoint(GRI.SpawnPoints[Sender.Tag]);
+    }
+
+    if (SRP == none || SRP.TeamIndex != PC.GetTeamNum() || SRP.SquadIndex != PRI.SquadIndex || !SRP.IsActive())
+    {
+        return false;
+    }
+
+    return true;
 }
 
 function bool MyContextClose(GUIContextMenu Sender)
 {
-    //return HandleContextMenuClose(Sender);
-    return false;
+    return true;
 }
 
 function MyContextSelect(GUIContextMenu Sender, int Index)
 {
-    //NotifyContextSelect(Sender, Index);
+    local DHSpawnPoint_SquadRallyPoint SRP;
+
+    if (PRI == none || !PRI.IsSquadLeader())
+    {
+        return;
+    }
+
+    if (GRI != none)
+    {
+        SRP = DHSpawnPoint_SquadRallyPoint(GRI.SpawnPoints[Sender.Tag]);
+    }
+
+    PC.ServerSquadDestroyRallyPoint(SRP);
+
+    return;
 }
 
 defaultproperties
 {
     OnDraw=InternalOnDraw
+
+    Begin Object Class=GUIContextMenu Name=SRPContextMenu
+        ContextItems(0)="Destroy"
+        OnOpen=DHGUIMapComponent.MyContextOpen
+        OnClose=DHGUIMapComponent.MyContextClose
+        OnSelect=DHGUIMapComponent.MyContextSelect
+    End Object
 
     // Spawn points
     Begin Object Class=DHGUICheckBoxButton Name=SpawnPointButton
@@ -150,6 +206,7 @@ defaultproperties
         CheckedOverlay(4)=material'DH_GUI_Tex.DeployMenu.spawn_point_osc'
         OnCheckChanged=InternalOnCheckChanged
         bCanClickUncheck=false
+        ContextMenu=SRPContextMenu
     End Object
 
     //TODO: This is begging to be put into a loop somewhere
@@ -216,50 +273,5 @@ defaultproperties
     b_SpawnPoints(60)=SpawnPointButton
     b_SpawnPoints(61)=SpawnPointButton
     b_SpawnPoints(62)=SpawnPointButton
-
-    // Spawn Vehicle Buttons
-    Begin Object Class=DHGUICheckBoxButton Name=SpawnVehicleButton
-        StyleName="DHSpawnVehicleButtonStyle"
-        WinWidth=0.04
-        WinHeight=0.04
-        bTabStop=false
-        OnCheckChanged=InternalOnCheckChanged
-        OnDblClick=OnDblClick
-        bVisible=false
-        CheckedOverlay(0)=material'DH_GUI_Tex.DeployMenu.spawn_point_osc'
-        CheckedOverlay(1)=material'DH_GUI_Tex.DeployMenu.spawn_point_osc'
-        CheckedOverlay(2)=material'DH_GUI_Tex.DeployMenu.spawn_point_osc'
-        CheckedOverlay(3)=material'DH_GUI_Tex.DeployMenu.spawn_point_osc'
-        CheckedOverlay(4)=material'DH_GUI_Tex.DeployMenu.spawn_point_osc'
-        bCanClickUncheck=false
-    End Object
-
-    // Rally Point Buttons
-    Begin Object Class=DHGUICheckBoxButton Name=RallyPointButton
-        StyleName="DHRallyPointButtonStyle"
-        WinWidth=0.04
-        WinHeight=0.04
-        bTabStop=false
-        OnCheckChanged=InternalOnCheckChanged
-        OnDblClick=OnDblClick
-        bVisible=false
-        CheckedOverlay(0)=material'DH_GUI_Tex.DeployMenu.spawn_point_osc'
-        CheckedOverlay(1)=material'DH_GUI_Tex.DeployMenu.spawn_point_osc'
-        CheckedOverlay(2)=material'DH_GUI_Tex.DeployMenu.spawn_point_osc'
-        CheckedOverlay(3)=material'DH_GUI_Tex.DeployMenu.spawn_point_osc'
-        CheckedOverlay(4)=material'DH_GUI_Tex.DeployMenu.spawn_point_osc'
-        bCanClickUncheck=false
-    End Object
-
-    Begin Object Class=GUIContextMenu Name=RCMenu
-        ContextItems(0)="Attack"
-        ContextItems(1)="Defend"
-        ContextItems(2)="-"
-        ContextItems(3)="Clear"
-        OnOpen=MyContextOpen
-        OnClose=MyContextClose
-        OnSelect=MyContextSelect
-    End Object
-    ContextMenu=GUIContextMenu'DH_Interface.DHGUIMapComponent.RCMenu'
 }
 

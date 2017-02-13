@@ -31,7 +31,8 @@ var localized string SquadRallyPointInWater;
 var localized string SquadRallyPointNotOnFoot;
 var localized string SquadRallyPointTooSoon;
 var localized string SquadRallyPointAbandoned;
-var localized string SquadRallyBadLocation;
+var localized string SquadRallyPointBadLocation;
+var localized string SquadRallyPointDestroyed;
 
 static function string GetString(optional int S, optional PlayerReplicationInfo RelatedPRI_1, optional PlayerReplicationInfo RelatedPRI_2, optional Object OptionalObject)
 {
@@ -94,7 +95,9 @@ static function string GetString(optional int S, optional PlayerReplicationInfo 
         case 55:
             return default.SquadRallyPointAbandoned;
         case 56:
-            return default.SquadRallyBadLocation;
+            return default.SquadRallyPointBadLocation;
+        case 57:
+            return default.SquadRallyPointDestroyed;
         default:
             break;
     }
@@ -129,7 +132,8 @@ defaultproperties
     SquadRallyPointInWater="You cannot create a squad rally point in water."
     SquadRallyPointNotOnFoot="You must be on foot to create a rally point."
     SquadRallyPointTooSoon="You must wait {0} seconds until your squad can create another rally point."
-    SquadRallyPointAbandoned="A squad rally point failed to be established."
-    SquadRallyBadLocation="A squad rally point cannot be created at this location."
+    SquadRallyPointAbandoned="A squad rally point failed to be established because it was abandoned."
+    SquadRallyPointBadLocation="A squad rally point cannot be created at this location."
+    SquadRallyPointDestroyed="The squad leader has forcibly destroyed a rally point."
 }
 

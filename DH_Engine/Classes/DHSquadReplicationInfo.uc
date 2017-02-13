@@ -1455,6 +1455,24 @@ function DHSpawnPoint_SquadRallyPoint SpawnRallyPoint(DHPlayer PC)
     return RP;
 }
 
+function DestroySquadRallyPoint(DHPlayerReplicationInfo PRI, DHSpawnPoint_SquadRallyPoint SRP)
+{
+    if (PRI == none || SRP == none)
+    {
+        return;
+    }
+
+    if (!PRI.IsSquadLeader() || PRI.Team.TeamIndex != SRP.TeamIndex || PRI.SquadIndex != SRP.SquadIndex || !SRP.IsActive())
+    {
+        return;
+    }
+
+    // "The squad leader has forcibly destroyed a rally point."
+    BroadcastSquadLocalizedMessage(SRP.TeamIndex, SRP.SquadIndex, SquadMessageClass, 57);
+
+    SRP.Destroy();
+}
+
 defaultproperties
 {
     AlliesSquadSize=12
