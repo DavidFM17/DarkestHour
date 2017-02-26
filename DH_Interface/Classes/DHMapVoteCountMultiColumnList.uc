@@ -12,8 +12,10 @@ function InitComponent(GUIController MyController, GUIComponent MyOwner)
 {
     Super.InitComponent(MyController,MyOwner);
 
-    if (RedListStyleName != "" && RedListStyle == None)
+    if (RedListStyleName != "" && RedListStyle == none)
+    {
         RedListStyle = MyController.GetStyle(RedListStyleName,FontScale);
+    }
 }
 
 function DrawItem(Canvas Canvas, int i, float X, float Y, float W, float H, bool bSelected, bool bPending)
@@ -55,12 +57,12 @@ function DrawItem(Canvas Canvas, int i, float X, float Y, float W, float H, bool
     DrawStyle.DrawText(Canvas, MenuState, CellLeft, Y, CellWidth, H, TXTA_Left, string(VRI.MapVoteCount[SortData[i].SortItem].VoteCount), FontScale);
 
     // Player Range
-    if (Parts.Length >= 4)
+    if (Parts.Length >= 5)
     {
         GetCellLeftWidth(2, CellLeft, CellWidth);
         OldDrawTyle = DrawStyle;
-        Min = int(Parts[2]);
-        Max = int(Parts[3]);
+        Min = int(Parts[3]);
+        Max = int(Parts[4]);
 
         if (Min > 0 || Max <= GRI.MaxPlayers)
         {
@@ -86,31 +88,6 @@ function DrawItem(Canvas Canvas, int i, float X, float Y, float W, float H, bool
             DrawStyle.DrawText(Canvas, MenuState, CellLeft, Y, CellWidth, H, TXTA_Center, PlayerRangeString, FontScale);
             DrawStyle = OldDrawTyle;
         }
-    }
-
-    // Quality Control
-    if (Parts.Length >= 5)
-    {
-        GetCellLeftWidth(3, CellLeft, CellWidth);
-
-        if (Parts[4] ~= "Failed" && MenuState != MSAT_Disabled)
-        {
-            OldDrawTyle = DrawStyle;
-            DrawStyle = RedListStyle;
-
-            DrawStyle.DrawText(Canvas, MenuState, CellLeft, Y, CellWidth, H, TXTA_Left, Parts[4], FontScale);
-
-            DrawStyle = OldDrawTyle;
-        }
-        else
-        {
-            DrawStyle.DrawText(Canvas, MenuState, CellLeft, Y, CellWidth, H, TXTA_Left, Parts[4], FontScale);
-        }
-    }
-    else
-    {
-        GetCellLeftWidth(3, CellLeft, CellWidth);
-        DrawStyle.DrawText(Canvas, MenuState, CellLeft, Y, CellWidth, H, TXTA_Left, "Pending", FontScale);
     }
 }
 
@@ -141,15 +118,12 @@ defaultproperties
     ColumnHeadings(0)="Nominated Maps"
     ColumnHeadings(1)="Votes"
     ColumnHeadings(2)="Player Range"
-    ColumnHeadings(3)="Quality Control"
-    InitColumnPerc(0)=0.3
-    InitColumnPerc(1)=0.2
-    InitColumnPerc(2)=0.2
-    InitColumnPerc(3)=0.3
+    InitColumnPerc(0)=0.4
+    InitColumnPerc(1)=0.3
+    InitColumnPerc(2)=0.3
     ColumnHeadingHints(0)="The map's name."
     ColumnHeadingHints(1)="Number of votes registered for this map."
     ColumnHeadingHints(2)="Recommended players for the map."
-    ColumnHeadingHints(3)="Whether or not the level has passed official quality control."
     SortColumn=1
     RedListStyleName="DHListRed"
 }

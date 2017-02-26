@@ -26,27 +26,16 @@ simulated function BringUp(optional Weapon PrevWeapon)
     ResetPlayerFOV();
 }
 
-simulated function bool ReadyToFire(int Mode)
+// Modified to prevent firing if player's weapons are locked due to spawn killing, with screen message if the local player
+// Gets called on both client & server, so includes server verification that player's weapons aren't locked (belt & braces as clientside check stops it reaching server)
+simulated function bool StartFire(int Mode)
 {
-    local DHPlayer PC;
-    local int WeaponLockTimeLeft;
-
-    if (Instigator != none)
+    if (Instigator != none && DHPlayer(Instigator.Controller) != none && DHPlayer(Instigator.Controller).AreWeaponsLocked())
     {
-        PC = DHPlayer(Instigator.Controller);
-
-        if (PC != none && PC.IsWeaponLocked(WeaponLockTimeLeft))
-        {
-            if (Instigator.IsLocallyControlled())
-            {
-                PC.ReceiveLocalizedMessage(class'DHWeaponsLockedMessage', 1,,, PC);
-            }
-
-            return false;
-        }
+        return false;
     }
 
-    return super.ReadyToFire(Mode);
+    return super.StartFire(Mode);
 }
 
 // Modified to take player out of ironsights if necessary, & to allow for multiple copies of weapon to drop with spread (so they aren't inside each other)

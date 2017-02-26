@@ -589,7 +589,7 @@ private function GetVehiclePoolIndicesByTag(name PoolTag, out array<byte> Vehicl
 
 private function AddVehiclePoolMaxSpawns(byte VehiclePoolIndex, int Value)
 {
-    if (!GRI.IsVehiclePoolInfinite(VehiclePoolIndex))
+    if (GRI != none && !GRI.IsVehiclePoolInfinite(VehiclePoolIndex))
     {
         if (Value > 0)
         {
@@ -651,11 +651,14 @@ function SetVehiclePoolMaxSpawnsByTag(name VehiclePoolTag, byte MaxSpawns)
     local array<byte> VehiclePoolIndices;
     local int         i;
 
-    GetVehiclePoolIndicesByTag(VehiclePoolTag, VehiclePoolIndices);
-
-    for (i = 0; i < VehiclePoolIndices.Length; ++i)
+    if (GRI != none)
     {
-        GRI.VehiclePoolMaxSpawns[VehiclePoolIndices[i]] = MaxSpawns;
+        GetVehiclePoolIndicesByTag(VehiclePoolTag, VehiclePoolIndices);
+
+        for (i = 0; i < VehiclePoolIndices.Length; ++i)
+        {
+            GRI.VehiclePoolMaxSpawns[VehiclePoolIndices[i]] = MaxSpawns;
+        }
     }
 }
 
@@ -664,20 +667,23 @@ function AddVehiclePoolMaxActiveByTag(name VehiclePoolTag, int Value)
     local array<byte> VehiclePoolIndices;
     local int         i;
 
-    GetVehiclePoolIndicesByTag(VehiclePoolTag, VehiclePoolIndices);
-
-    for (i = 0; i < VehiclePoolIndices.Length; ++i)
+    if (GRI != none)
     {
-        if (Value > 0)
-        {
-            BroadcastTeamLocalizedMessage(VehiclePools[VehiclePoolIndices[i]].VehicleClass.default.VehicleTeam, Level.Game.default.GameMessageClass, 300 + VehiclePoolIndices[i],,, self);
-        }
+        GetVehiclePoolIndicesByTag(VehiclePoolTag, VehiclePoolIndices);
 
-        GRI.VehiclePoolMaxActives[VehiclePoolIndices[i]] = Clamp(int(GRI.VehiclePoolMaxActives[VehiclePoolIndices[i]]) + Value, 0, 254);
-
-        if (Value < 0 && GRI.VehiclePoolMaxActives[VehiclePoolIndices[i]] == 0)
+        for (i = 0; i < VehiclePoolIndices.Length; ++i)
         {
-            BroadcastTeamLocalizedMessage(VehiclePools[VehiclePoolIndices[i]].VehicleClass.default.VehicleTeam, Level.Game.default.GameMessageClass, 400 + VehiclePoolIndices[i],,, self);
+            if (Value > 0)
+            {
+                BroadcastTeamLocalizedMessage(VehiclePools[VehiclePoolIndices[i]].VehicleClass.default.VehicleTeam, Level.Game.default.GameMessageClass, 300 + VehiclePoolIndices[i],,, self);
+            }
+
+            GRI.VehiclePoolMaxActives[VehiclePoolIndices[i]] = Clamp(int(GRI.VehiclePoolMaxActives[VehiclePoolIndices[i]]) + Value, 0, 254);
+
+            if (Value < 0 && GRI.VehiclePoolMaxActives[VehiclePoolIndices[i]] == 0)
+            {
+                BroadcastTeamLocalizedMessage(VehiclePools[VehiclePoolIndices[i]].VehicleClass.default.VehicleTeam, Level.Game.default.GameMessageClass, 400 + VehiclePoolIndices[i],,, self);
+            }
         }
     }
 }
@@ -687,11 +693,14 @@ function SetVehiclePoolMaxActiveByTag(name VehiclePoolTag, byte Value)
     local array<byte> VehiclePoolIndices;
     local int        i;
 
-    GetVehiclePoolIndicesByTag(VehiclePoolTag, VehiclePoolIndices);
-
-    for (i = 0; i < VehiclePoolIndices.Length; ++i)
+    if (GRI != none)
     {
-        GRI.VehiclePoolMaxActives[VehiclePoolIndices[i]] = Value;
+        GetVehiclePoolIndicesByTag(VehiclePoolTag, VehiclePoolIndices);
+
+        for (i = 0; i < VehiclePoolIndices.Length; ++i)
+        {
+            GRI.VehiclePoolMaxActives[VehiclePoolIndices[i]] = Value;
+        }
     }
 }
 

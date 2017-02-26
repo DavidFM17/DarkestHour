@@ -10,18 +10,18 @@ class DHVolumeTest extends ROVolumeTest;
 function bool IsInNoArtyVolume()
 {
     local Volume V;
-    local DHSpawnPoint SP;
 
     foreach TouchingActors(class'Volume', V)
     {
         // Prevent arty if we're in a no arty volume, unless it's linked to a spawn point/area that isn't active/current
         if (V.IsA('RONoArtyVolume'))
         {
-            SP = DHSpawnPoint(V.AssociatedActor);
-
-            if (SP != none && SP.IsActive())
+            if (DHSpawnPoint(V.AssociatedActor) != none)
             {
-                return true;
+                if (IsActiveSpawnPoint(DHSpawnPoint(V.AssociatedActor)))
+                {
+                    return true;
+                }
             }
             else if (RONoArtyVolume(V).AssociatedSpawn != none)
             {
@@ -58,6 +58,13 @@ function bool IsInNoArtyVolume()
     }
 
     return false;
+}
+
+// New helper function returns true if this DHSpawnPoint is active (just improves readability in main class function above)
+// (Similar to IsCurrentSpawnArea() for spawn areas)
+function bool IsActiveSpawnPoint(DHSpawnPoint SP)
+{
+    return SP != none && SP.IsActive();
 }
 
 defaultproperties

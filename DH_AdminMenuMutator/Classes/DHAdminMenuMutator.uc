@@ -88,9 +88,10 @@ function SetInitialVariables()
         SaveMinefields();
 
         // Look for the realism match mutator - if it's there we just set a flag
+        // Check GroupName as there are different realism mutator versions & may have different class names, but GroupName should be constant
         for (Mut = Level.Game.BaseMutator; Mut != none; Mut = Mut.NextMutator)
         {
-            if (Mut.IsA('MutRealismMatch'))
+            if (Mut.GroupName ~= "RealismMatch")
             {
                 bRealismMutPresent = true;
                 break;
@@ -450,7 +451,7 @@ function SwitchPlayer(string PlayerName, string TeamName, string RoleName, strin
     }
 
     // Now change team and/or role
-    PlayerToSwitch.ServerSetPlayerInfo(TeamIndex, RoleIndex, 0, 0, PlayerToSwitch.SpawnPointIndex, -1);
+    PlayerToSwitch.ServerSetPlayerInfo(TeamIndex, RoleIndex, 0, 0, PlayerToSwitch.SpawnPointIndex, 255, 255);
 
     // If switched teams, now restore restore original team balance setting & find an active spawn point for the new team (just find 1st active spawn for team)
     if (TeamIndex != 255 && ROTG != none)
@@ -1358,10 +1359,10 @@ function vector GetAdjustedHudLocation(vector HudLoc, optional bool bInvert)
             }
         }
 
-        if (OverheadOffset  == 90)
+        if (OverheadOffset == 90)
         {
             SwapX = HudLoc.Y * -1.0;
-            SwapY = HudLoc.X ;
+            SwapY = HudLoc.X;
             HudLoc.X = SwapX;
             HudLoc.Y = SwapY;
         }
@@ -1387,39 +1388,46 @@ function vector GetAdjustedHudLocation(vector HudLoc, optional bool bInvert)
 function SetParaDropVariables()
 {
     local ROGameReplicationInfo GRI;
-    local TerrainInfo           TInfo;
-    local vector                TILocation, MapDiagonal;
+    local TerrainInfo           TI;
+    local vector                TestLocation, MapDiagonal;
     local Actor                 TestActor;
     local int                   i;
 
-    foreach AllActors(class'TerrainInfo', TInfo)
+    // Get the maximum safe height to paradrop a player, without him getting stuck in the skybox or whatever
+    // For a starting location we get the location of the TerrainInfo actor
+    foreach AllActors(class'TerrainInfo', TI)
     {
-        TILocation.Z = TInfo.Location.Z;
+        TestLocation = TI.Location;
         break;
     }
 
+    // We'll spawn a temporary static mesh test actor & use it to check up to 5 locations of increasing height
     for (i = 1; i < 6; ++i)
     {
-        TILocation.Z += 1920.0;
-        TestActor = Spawn(class'DH_AdminMenuMutator.DHAdminMenu_TestSM', , , TILocation);
+        TestLocation.Z += 1920.0; // each pass we'll try moving the test location higher (approx 32m)
 
-        if (TestActor != none)
+        // On the 1st pass we'll spawn the test actor (1920 UU above the TerrainInfo)
+        if (TestActor == none)
         {
-            TestActor.SetStaticMesh(none);
+            TestActor = Spawn(class'DH_AdminMenuMutator.DHAdminMenu_TestSM',,, TestLocation); // spawns on 1st pass & then gets moved
         }
-
-        if ((i == 5 && TestActor != none) || TestActor == none)
+        // Only subsequent passes we try to move the test actor to the new higher location
+        // If we fail (i.e. SetLocation returns false) then we're too high, so revert to the previous height & stop checking
+        else if (!TestActor.SetLocation(TestLocation))
         {
-            if (TestActor != none)
-            {
-                TestActor.Destroy();
-            }
-
-            TILocation.Z -= 1920.0;
-            ParaDropHeight = TILocation.Z;
+            TestLocation.Z -= 1920.0;
+            break;
         }
     }
 
+    ParaDropHeight = TestLocation.Z;
+
+    if (TestActor != none)
+    {
+        TestActor.Destroy();
+    }
+
+    // Now calculate the map centre & scale
     GRI = ROGameReplicationInfo(Level.Game.GameReplicationInfo);
     MapDiagonal = GRI.SouthWestBounds - GRI.NorthEastBounds;
     MapCenter = (MapDiagonal / 2.0) + GRI.NorthEastBounds;

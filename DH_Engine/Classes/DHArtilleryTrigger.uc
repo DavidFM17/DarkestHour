@@ -5,15 +5,18 @@
 
 class DHArtilleryTrigger extends ROArtilleryTrigger;
 
-var()   bool        bShouldShowOnSituationMap;
-var()   float       TriggerDelay;
+var()   bool        bShouldShowOnSituationMap;    // whether HUD overhead map should show an icon to mark this arty trigger's position
+var()   float       TriggerDelay;                 // time in seconds between repeat use of this trigger
 
-var     float       TriggerTime;
-var     DHPawn      Carrier;
-var     SoundGroup  AlliedNationRequestSounds[4];
+var     float       TriggerTime;                  // last time this trigger was used
+var     DHPawn      Carrier;                      // a radioman player pawn that is carrying this arty trigger
+
+var     SoundGroup  AlliedNationRequestSounds[4]; // voice sounds for different allies nations (USA = 0, Britain = 1, Canada = 2, Soviet Union = 3)
 var     SoundGroup  AlliedNationConfirmSounds[4];
 var     SoundGroup  AlliedNationDenySounds[4];
 
+// Modified so only arty officer roles can call in arty, & to use request sounds for different allies nations
+// Also to stop a player calling arty if they are on fire or if their weapons have been locked (for spawn killing)
 function UsedBy(Pawn User)
 {
     local DHRoleInfo   RI;
@@ -30,10 +33,16 @@ function UsedBy(Pawn User)
 
     if (DHPawn(User) != none)
     {
+        // Don't let a burning player call arty
+        if (DHPawn(User).bOnFire)
+        {
+            return;
+        }
+
         RI = DHPawn(User).GetRoleInfo();
     }
 
-    // Don't let non-commanders call in arty
+    // Only allow arty officer roles to call in arty
     if (RI == none || !RI.bIsArtilleryOfficer)
     {
         return;
@@ -41,13 +50,26 @@ function UsedBy(Pawn User)
 
     PC = DHPlayer(User.Controller);
 
-    // Bots can't call arty yet
+    // Bots can't call arty
     if (PC == none)
     {
         return;
     }
 
-    // Exit if no co-ordinates selected (with message)
+    // Check this arty trigger can be used by player's team
+    if (!ApprovePlayerTeam(PC.GetTeamNum()))
+    {
+        return;
+    }
+
+    // Don't let player call arty if his weapons have been locked due to spawn killing
+    // Unlike weapon fire, we have no way of stopping this on the player's client, so we rely on the server to prevent arty use
+    if (PC.AreWeaponsLocked())
+    {
+        return;
+    }
+
+    // Exit if no arty co-ordinates selected (with message)
     if (PC.SavedArtilleryCoords == vect(0.0, 0.0, 0.0))
     {
         PC.ReceiveLocalizedMessage(class'ROArtilleryMsg', 4); // no co-ords selected
@@ -71,16 +93,13 @@ function UsedBy(Pawn User)
         VolumeTest.Destroy();
     }
 
-    // If player is of a team that can use this trigger, call in an arty strike
-    if (ApprovePlayerTeam(PC.GetTeamNum())) // TODO: move this simple check up above the no arty volume test, so quick check is done before spawning & destroying a volume test actor
-    {
-        bAvailable = false;
-        SavedUser = User;
-        PC.ReceiveLocalizedMessage(class'ROArtilleryMsg', 1); // request strike
-        RequestSound = GetRequestSound(PC.GetTeamNum());
-        User.PlaySound(RequestSound, SLOT_None, 3.0, false, 100.0, 1.0, true);
-        SetTimer(GetSoundDuration(RequestSound), false);
-    }
+    // All checks passed so call an arty strike
+    bAvailable = false;
+    SavedUser = User;
+    PC.ReceiveLocalizedMessage(class'ROArtilleryMsg', 1); // request strike
+    RequestSound = GetRequestSound(PC.GetTeamNum());
+    User.PlaySound(RequestSound, SLOT_None, 3.0, false, 100.0, 1.0, true);
+    SetTimer(GetSoundDuration(RequestSound), false);
 }
 
 function sound GetRequestSound(int TeamIndex)
@@ -143,6 +162,7 @@ function sound GetDenySound(int TeamIndex)
     return none;
 }
 
+// Modified so only arty officer roles can call in arty, & to add a TriggerDelay time before this trigger can be used again
 function Touch(Actor Other)
 {
     local Pawn P;

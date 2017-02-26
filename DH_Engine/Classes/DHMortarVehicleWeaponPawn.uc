@@ -391,10 +391,11 @@ simulated function ClientKDriverLeave(PlayerController PC)
 //  ******************************* FIRING & AMMO  ********************************  //
 ///////////////////////////////////////////////////////////////////////////////////////
 
-// New replicated client-to-server function to fire the mortar, after the firing animation has played (there's a delay firing a mortar, as the round is dropped down the tube)
+// New replicated client-to-server function to fire mortar, after firing animation has played (there's a delay firing mortar, as round is dropped down the tube)
+// Includes server verification that player's weapons aren't locked due to spawn killing (belt & braces as similar clientside check stops it reaching this point anyway)
 function ServerFire()
 {
-    if (Gun != none)
+    if (!ArePlayersWeaponsLocked() && Gun != none)
     {
         Gun.Fire(Controller);
     }
@@ -473,17 +474,7 @@ simulated state Idle
 
     simulated function Fire(optional float F)
     {
-        local DHPlayer PC;
-
-        PC = DHPlayer(Controller);
-
-        if (PC != none && PC.IsWeaponLocked())
-        {
-            PC.ReceiveLocalizedMessage(class'DHWeaponsLockedMessage', 1,,, PC);
-            return;
-        }
-
-        if (VehWep != none && VehWep.HasAmmo(VehWep.GetAmmoIndex()))
+        if (!ArePlayersWeaponsLocked() && VehWep != none && VehWep.HasAmmo(VehWep.GetAmmoIndex()))
         {
             GotoState('Firing');
         }
@@ -553,17 +544,7 @@ simulated state KnobRaised
 
     simulated function Fire(optional float F)
     {
-        local DHPlayer PC;
-
-        PC = DHPlayer(Controller);
-
-        if (PC != none && PC.IsWeaponLocked())
-        {
-            PC.ReceiveLocalizedMessage(class'DHWeaponsLockedMessage', 1,,, PC);
-            return;
-        }
-
-        if (VehWep != none && VehWep.HasAmmo(VehWep.GetAmmoIndex()))
+        if (!ArePlayersWeaponsLocked() && VehWep != none && VehWep.HasAmmo(VehWep.GetAmmoIndex()))
         {
             GotoState('KnobRaisedToFire');
         }
@@ -648,17 +629,10 @@ simulated state FireToIdle extends Busy
 {
     simulated function Fire(optional float F)
     {
-        local DHPlayer PC;
-
-        PC = DHPlayer(Controller);
-
-        if (PC != none && PC.IsWeaponLocked())
+        if (!ArePlayersWeaponsLocked())
         {
-            PC.ReceiveLocalizedMessage(class'DHWeaponsLockedMessage', 1,,, PC);
-            return;
+            bPendingFire = true; // allows us to queue up a shot in this stage so we don't have an arbitrary 'waiting time' before we accept input after firing
         }
-
-        bPendingFire = true; // allows us to queue up a shot in this stage so we don't have an arbitrary 'waiting time' before we accept input after firing
     }
 
     simulated function EndState()
@@ -872,6 +846,53 @@ simulated function PlayFirstPersonAnimation(name Anim, optional bool bLoop, opti
             HUDOverlay.PlayAnim(Anim, Rate, TweenTime);
         }
     }
+}
+
+///////////////////////////////////////////////////////////////////////////////////////
+//  *******************************  MISCELLANEOUS  *******************************  //
+///////////////////////////////////////////////////////////////////////////////////////
+
+// Modified to add extra material properties
+static function StaticPrecache(LevelInfo L)
+{
+    super.StaticPrecache(L);
+
+    if (default.HUDArcTexture != none)
+    {
+        L.AddPrecacheMaterial(default.HUDArcTexture);
+    }
+
+    if (default.HUDArrowTexture != none)
+    {
+        L.AddPrecacheMaterial(default.HUDArrowTexture);
+    }
+
+    if (default.HUDHighExplosiveTexture != none)
+    {
+        L.AddPrecacheMaterial(default.HUDHighExplosiveTexture);
+    }
+
+    if (default.HUDSmokeTexture != none)
+    {
+        L.AddPrecacheMaterial(default.HUDSmokeTexture);
+    }
+
+    if (default.Digits.DigitTexture != none)
+    {
+        L.AddPrecacheMaterial(default.Digits.DigitTexture);
+    }
+}
+
+// Modified to add extra material properties
+simulated function UpdatePrecacheMaterials()
+{
+    super.UpdatePrecacheMaterials();
+
+    Level.AddPrecacheMaterial(HUDArcTexture);
+    Level.AddPrecacheMaterial(HUDArrowTexture);
+    Level.AddPrecacheMaterial(HUDHighExplosiveTexture);
+    Level.AddPrecacheMaterial(HUDSmokeTexture);
+    Level.AddPrecacheMaterial(Digits.DigitTexture);
 }
 
 defaultproperties

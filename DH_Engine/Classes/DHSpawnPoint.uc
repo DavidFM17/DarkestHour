@@ -104,6 +104,9 @@ simulated function bool CanSpawnVehicles()
     return Type == ESPT_Vehicles || Type == ESPT_All;
 }
 
+// Special check that allows the option for an infantry spawn point to be set up allow players to spawn into infantry vehicles, as well as on foot
+// That means cars, trucks or APCs, but not tanks or any vehicle that requires the player to be tank crew (prevented by checks elsewhere, when this function is called)
+// For this to be allowed, the leveller must have included some VehicleLocationHints linked to the infantry spawn
 simulated function bool CanSpawnInfantryVehicles()
 {
     return Type == ESPT_InfantryVehicles || Type == ESPT_Vehicles || Type == ESPT_All;

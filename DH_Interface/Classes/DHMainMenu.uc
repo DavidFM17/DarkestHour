@@ -107,19 +107,6 @@ function InternalOnOpen()
 
     if (SavedVersion != CurrentVersion)
     {
-        // To make a long story short, we can't force the client to delete
-        // their configuration file at will, so we need to forcibly create
-        // control bindings for new commands.
-        if (SavedVersion == "")
-        {
-            // v7.0.0
-            OnHideAnnouncement = ShowControlsChangedMessage;
-
-            PlayerOwner().ConsoleCommand("set input i SquadTalk");
-            PlayerOwner().ConsoleCommand("set input insert Speak Squad");
-            PlayerOwner().ConsoleCommand("set input capslock ShowOrderMenu | OnRelease HideOrderMenu");
-        }
-
         //ShowAnnouncement();
 
         SavedVersion = class'DarkestHourGame'.default.Version.ToString();
@@ -402,8 +389,8 @@ function GetMOTD()
     }
 
     MOTDRequest = PlayerOwner().Spawn(class'HTTPRequest');
-    MOTDRequest.Host = "www.darkesthour.darklightgames.com";
-    MOTDRequest.Path = "/game/motd.php";
+    MOTDRequest.Host = "darklightgames.000webhostapp.com";
+    MOTDRequest.Path = "/darkest_hour/motd.php";
     MOTDRequest.OnResponse = OnMOTDResponse;
     MOTDRequest.Send();
 
@@ -415,15 +402,15 @@ function GetMOTD()
 function GetQuickPlayIp()
 {
     QuickPlayRequest = PlayerOwner().Spawn(class'HTTPRequest');
-    QuickPlayRequest.Host = "www.darkesthour.darklightgames.com";
+    QuickPlayRequest.Host = "darklightgames.000webhostapp.com";
 
     if (class'DarkestHourGame'.default.Version.IsPrerelease())
     {
-        QuickPlayRequest.Path = "/game/betaserverip.php";
+        QuickPlayRequest.Path = "/darkest_hour/betaserverip.php";
     }
     else
     {
-        QuickPlayRequest.Path = "/game/quickjoinip.php";
+        QuickPlayRequest.Path = "/darkest_hour/quickplayip.php";
     }
 
     QuickPlayRequest.OnResponse = OnQuickPlayResponse;

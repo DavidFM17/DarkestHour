@@ -61,7 +61,8 @@ var automated   GUILabel                    l_Status;
 var automated   GUIImage                        i_PrimaryWeapon;
 var automated   GUIImage                        i_SecondaryWeapon;
 var automated   GUIImage                        i_Vehicle;
-var automated   GUIImage                        i_SpawnVehicle;
+var automated   GUIGFXButton                    i_SpawnVehicle;
+var automated   GUIGFXButton                    i_ArtilleryVehicle;
 var automated   DHmoComboBox                cb_PrimaryWeapon;
 var automated   DHmoComboBox                cb_SecondaryWeapon;
 var automated   GUIImage                    i_GivenItems[5];
@@ -99,6 +100,7 @@ var             float                       NextChangeTeamTime;
 var             ELoadoutMode                LoadoutMode;
 
 var             int                         SpawnPointIndex;
+var             byte                        SpawnVehicleIndex;
 
 var             bool                        bButtonsEnabled;
 
@@ -174,6 +176,7 @@ function InitComponent(GUIController MyController, GUIComponent MyOwner)
 
     c_Vehicle.ManageComponent(i_Vehicle);
     c_Vehicle.ManageComponent(i_SpawnVehicle);
+    c_Vehicle.ManageComponent(i_ArtilleryVehicle);
     c_Vehicle.ManageComponent(lb_Vehicles);
 
     c_Roles.ManageComponent(lb_Roles);
@@ -212,6 +215,7 @@ function SetLoadoutMode(ELoadoutMode Mode)
             b_EquipmentButton.DisableMe();
             b_VehicleButton.EnableMe();
             i_SpawnVehicle.SetVisibility(false);
+            i_ArtilleryVehicle.SetVisibility(false);
 
             break;
         case LM_Vehicle:
@@ -444,8 +448,6 @@ function UpdateSpawnPoints()
 
                 p_Map.b_SpawnPoints[i].MenuStateChange(MSAT_Disabled);
             }
-
-            p_Map.b_SpawnPoints[i].Style = Controller.GetStyle(GRI.SpawnPoints[i].GetStyleName(), FS);
         }
         else
         {
@@ -453,7 +455,7 @@ function UpdateSpawnPoints()
             // deselect it.
             p_Map.b_SpawnPoints[i].SetVisibility(false);
 
-            if (SpawnPointIndex != -1 && SpawnPointIndex == p_Map.b_SpawnPoints[i].Tag)
+            if (SpawnPointIndex == p_Map.b_SpawnPoints[i].Tag)
             {
                 p_Map.SelectSpawnPoint(-1);
             }
@@ -992,19 +994,28 @@ function AutoSelectRole()
     }
 }
 
-// Colin: Automatically selects the players' currently selected vehicle to
+// Automatically selects the players' currently selected vehicle to
 // spawn. If no vehicle is selected to spawn, the "None" option will be
-// selected.
+// selected, by default.
 function AutoSelectVehicle()
 {
-    local class<Vehicle> VehicleClass;
+    local int i;
+    local UInteger Integer;
 
-    if (PC.VehiclePoolIndex >= 0 && PC.VehiclePoolIndex < arraycount(GRI.VehiclePoolVehicleClasses))
+    if (PC.VehiclePoolIndex < 0)
     {
-        VehicleClass = GRI.VehiclePoolVehicleClasses[PC.VehiclePoolIndex];
+        return;
     }
 
-    li_Vehicles.SelectByObject(VehicleClass);
+    for (i = 0; i < li_Vehicles.Elements.Length; ++i)
+    {
+        Integer = UInteger(li_Vehicles.Elements[i].ExtraData);
+
+        if (Integer != none && Integer.Value == PC.VehiclePoolIndex)
+        {
+            li_Vehicles.SetIndex(i);
+        }
+    }
 }
 
 function InternalOnMessage(coerce string Msg, float MsgLife)
@@ -1266,6 +1277,7 @@ function InternalOnChange(GUIComponent Sender)
 function UpdateVehicleImage()
 {
     local class<Vehicle> VehicleClass;
+    local class<DHVehicle> DHVC;
     local int VehiclePoolIndex;
 
     VehiclePoolIndex = GetSelectedVehiclePoolIndex();
@@ -1283,11 +1295,23 @@ function UpdateVehicleImage()
         {
             i_SpawnVehicle.Hide();
         }
+
+        DHVC = class<DHVehicle>(VehicleClass);
+
+        if (DHVC != none && DHVC.default.bIsArtilleryVehicle)
+        {
+            i_ArtilleryVehicle.Show();
+        }
+        else
+        {
+            i_ArtilleryVehicle.Hide();
+        }
     }
     else
     {
         i_Vehicle.Image = default.VehicleNoneMaterial;
         i_SpawnVehicle.Hide();
+        i_ArtilleryVehicle.Hide();
     }
 }
 
@@ -2210,17 +2234,31 @@ defaultproperties
     End Object
     i_Vehicle=VehicleImageObject
 
-    Begin Object Class=GUIImage Name=SpawnVehicleImageObject
-        WinWidth=1.0
+    Begin Object Class=GUIGFXButton Name=SpawnVehicleImageObject
+        WinWidth=0.25
         WinHeight=0.125
-        WinLeft=0.0
+        WinLeft=0.75
         WinTop=0.0
-        ImageStyle=ISTY_Normal
-        ImageAlign=IMGA_BottomRight
-        Image=material'DH_GUI_Tex.DeployMenu.DeployEnabled'
+        Position=ICP_Center
+        Graphic=material'DH_GUI_Tex.DeployMenu.DeployEnabled'
+        Hint="Spawn Vehicle"
         bVisible=false
+        StyleName="TextLabel"
     End Object
     i_SpawnVehicle=SpawnVehicleImageObject
+
+    Begin Object Class=GUIGFXButton Name=ArtilleryVehicleImageObject
+        WinWidth=0.25
+        WinHeight=0.125
+        WinLeft=0.75
+        WinTop=0.0
+        Position=ICP_Center
+        Graphic=material'DH_GUI_Tex.DeployMenu.artillery'
+        bVisible=false
+        Hint="Artillery Vehicle"
+        StyleName="TextLabel"
+    End Object
+    i_ArtilleryVehicle=ArtilleryVehicleImageObject
 
     Begin Object Class=GUILabel Name=StatusLabelObject
         WinWidth=0.26

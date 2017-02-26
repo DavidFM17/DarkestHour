@@ -24,7 +24,7 @@ var     DHObstacleManager           ObstacleManager;
 var     array<string>               FFViolationIDs;                         // Array of ROIDs that have been kicked once this session
 var()   config bool                 bSessionKickOnSecondFFViolation;
 var()   config bool                 bUseWeaponLocking;                      // Weapons can lock (preventing fire) for punishment
-var     int                         WeaponLockTimes[6];
+var     int                         WeaponLockTimes[10];
 
 var     class<DHObstacleManager>    ObstacleManagerClass;
 
@@ -198,7 +198,7 @@ function PostBeginPlay()
 
         case GT_Advance:
             GRI.CurrentGameType = "Advance";
-            GRI.bUseDeathPenaltyCount = true;
+            //GRI.bUseDeathPenaltyCount = true; // disable for now, as this feature is likely to be removed
             bUseReinforcementWarning = false;
             break;
 
@@ -258,7 +258,7 @@ function PostBeginPlay()
         GRI.AxisHelpRequests[k].RequestType = 255;
     }
 
-    ResetMortarTargets();
+    ResetArtilleryTargets();
 
     if (LevelInfo.OverheadOffset == OFFSET_90)
     {
@@ -681,7 +681,7 @@ function NavigationPoint FindPlayerStart(Controller Player, optional byte InTeam
 
         BestRating = -100000000.0;
 
-        foreach AllActors(class 'PlayerStart', PS)
+        foreach AllActors(class'PlayerStart', PS)
         {
             NewRating = RatePlayerStart(PS, InTeam, Player); // now passing the actual team, where this used to pass zero (& so always axis)
             NewRating += 20.0 * FRand(); // add some randomisation
@@ -937,18 +937,16 @@ function Bot SpawnBot(optional string botName)
 function byte PickTeam(byte num, Controller C)
 {
     local UnrealTeamInfo NewTeam;
-    local int SmallTeam, BigTeam;
-
-    local int TeamSizes[2];
-    local int IdealTeamSizes[2];
-    local float TeamSizeRatings[2];
+    local int            SmallTeam, BigTeam, TeamSizes[2], IdealTeamSizes[2];
+    local float          TeamSizeRatings[2];
 
     if (bPlayersVsBots && (Level.NetMode != NM_Standalone))
     {
-        if (PlayerController(C) != None)
+        if (PlayerController(C) != none)
         {
             return 1;
         }
+
         return 0;
     }
 
@@ -971,14 +969,14 @@ function byte PickTeam(byte num, Controller C)
         NewTeam = Teams[num];
     }
 
-    if (NewTeam == None)
+    if (NewTeam == none)
     {
         NewTeam = Teams[SmallTeam];
     }
-    else if (bPlayersBalanceTeams && (Level.NetMode != NM_Standalone) && (PlayerController(C) != None))
+    else if (bPlayersBalanceTeams && Level.NetMode != NM_Standalone && PlayerController(C) != none)
     {
         // If the teams are on the verge of being off balance, force the player onto the small team
-        if ((Abs(IdealTeamSizes[0] - TeamSizes[0]) >=  MaxTeamDifference) || (Abs(IdealTeamSizes[1] - TeamSizes[1]) >=  MaxTeamDifference))
+        if (Abs(IdealTeamSizes[0] - TeamSizes[0]) >= MaxTeamDifference || Abs(IdealTeamSizes[1] - TeamSizes[1]) >= MaxTeamDifference)
         {
             NewTeam = Teams[SmallTeam];
         }
@@ -987,7 +985,7 @@ function byte PickTeam(byte num, Controller C)
     return NewTeam.TeamIndex;
 }
 
-// Handles calculation of team balance variables (in seperate function so this code isn't duplicated in a couple places)
+// Handles calculation of team balance variables (in separate function so this code isn't duplicated in a couple places)
 function CalculateTeamBalanceValues(out int TeamSizes[2], out int IdealTeamSizes[2], out float TeamSizeRatings[2])
 {
     local float TeamRatios[2];
@@ -1227,7 +1225,7 @@ function int ReduceDamage(int Damage, Pawn Injured, Pawn InstigatedBy, vector Hi
         }
 
         // If the instigator has weapons locked, return no damage
-        if (DHPlayer(InstigatedBy.Controller) != none && DHPlayer(InstigatedBy.Controller).IsWeaponLocked())
+        if (DHPlayer(InstigatedBy.Controller) != none && DHPlayer(InstigatedBy.Controller).AreWeaponsLocked(true)) // passing true suppresses usual screen message if locked
         {
             return 0;
         }
@@ -1775,6 +1773,7 @@ function ChangeRole(Controller aPlayer, int i, optional bool bForceMenu)
                     Playa.DHSecondaryWeapon = -1;
                     Playa.GrenadeWeapon = -1;
                     Playa.bWeaponsSelected = false;
+                    Playa.SavedArtilleryCoords = vect(0.0, 0.0, 0.0); // stops arty co-ords remaining on player's map if he stops being an arty officer
                     SetCharacter(aPlayer);
                 }
             }
@@ -1791,7 +1790,7 @@ function ChangeRole(Controller aPlayer, int i, optional bool bForceMenu)
 
             if (GRI != none)
             {
-                GRI.ClearMortarTarget(DHPlayer(aPlayer));
+                GRI.ClearArtilleryTarget(DHPlayer(aPlayer));
             }
         }
         else
@@ -1850,11 +1849,10 @@ function ChangeRole(Controller aPlayer, int i, optional bool bForceMenu)
 
 function Killed(Controller Killer, Controller Killed, Pawn KilledPawn, class<DamageType> DamageType)
 {
-    local Controller        P;
-    local DHPlayer          DHP;
-    local DHPawn            KPawn;
-    local float             FFPenalty;
-    local int               Num, i;
+    local DHPlayer   DHKilled, DHKiller;
+    local Controller P;
+    local float      FFPenalty;
+    local int        Num, i;
 
     if (Killed == none)
     {
@@ -1873,38 +1871,27 @@ function Killed(Controller Killer, Controller Killed, Pawn KilledPawn, class<Dam
             Killed.PlayerReplicationInfo.Deaths += 1.0;
         }
 
-        if (KilledPawn != none)
+        // Special handling if this was a spawn kill
+        // Suiciding won't count as a spawn kill - did this because suiciding after a combat spawn will not act the same way & thus is not intuitive
+        if (DHPawn(KilledPawn) != none && DHPawn(KilledPawn).IsSpawnKillProtected() && Killer != Killed)
         {
-            KPawn = DHPawn(KilledPawn);
-            DHP = DHPlayer(Killer);
-        }
+            DHKilled = DHPlayer(Killed);
+            DHKiller = DHPlayer(Killer);
 
-        // If this was a spawn kill, handle the rules for spawn kill and adjust damage type
-        // Suiciding will not count as a Spawn Kill, did this because suiciding after a combat spawn will not act the same way, and thus is not intuitive
-        if (DHP != none && KPawn != none && KPawn.IsSpawnKillProtected() && Killer != Killed && DHPlayer(Killed) != none)
-        {
-            // Inform the victim's DHPlayer that it was spawn killed
-            DHPlayer(Killed).bSpawnedKilled = true;
-
-            // Increase infantry reinforcements for victim's team (only if nonzero)
-            ModifyReinforcements(Killed.GetTeamNum(), 1, false, true);
-
-            // Change the damage type because this was a spawn kill and we want to signify that
-            DamageType = class'DHSpawnKillDamageType';
-
-            // Punish instigator for spawn killing (lock weapons)
-            DHP.WeaponLockViolations++;
-            DHP.LockWeapons(WeaponLockTimes[Min(DHP.WeaponLockViolations, arraycount(WeaponLockTimes))]);
-
-            // Punish instigator for spawn killing (reduce score)
-            DHP.PlayerReplicationInfo.Score -= 2;
-
-            // Allow the player to spawn a vehicle right away
-            DHP.NextVehicleSpawnTime = DHP.LastKilledTime + SPAWN_KILL_RESPAWN_TIME;
-
-            if (KPawn.SpawnPoint != none)
+            if (DHKiller != none && DHKilled != none) // only relevant to player vs player spawn kills
             {
-                KPawn.SpawnPoint.OnSpawnKill(KPawn, Killer);
+                DamageType = class'DHSpawnKillDamageType'; // change the damage type to signify this was a spawn kill
+
+                // Inform victim's controller that it was spawn killed, allow player to re-spawn in a vehicle quickly,
+                // & increment player reinforcements for victim's team so they don't suffer loss
+                DHKilled.bSpawnedKilled = true;
+                DHKilled.NextVehicleSpawnTime = DHKilled.LastKilledTime + SPAWN_KILL_RESPAWN_TIME;
+                ModifyReinforcements(DHKilled.GetTeamNum(), 1, false, true);
+
+                // Punish killer for spawn killing by locking his weapons (also incrementing his WeaponLockViolations) & reducing his score
+                DHKiller.WeaponLockViolations++;
+                DHKiller.LockWeapons(WeaponLockTimes[Min(DHKiller.WeaponLockViolations, arraycount(WeaponLockTimes) - 1)]); // TODO: probably add 1 second as we are 'mid second' in game time
+                DHKiller.PlayerReplicationInfo.Score -= 2;
             }
         }
 
@@ -1936,7 +1923,8 @@ function Killed(Controller Killer, Controller Killed, Pawn KilledPawn, class<Dam
                     {
                         FFPenalty = FFArtyScale;
                     }
-                    else if (class<ROGrenadeDamType>(DamageType) != none || class<ROSatchelDamType>(DamageType) != none || class<ROTankShellExplosionDamage>(DamageType) != none)
+                    // Added mortar HE (& removed specific satchel damage as now all thrown explosives extend from ROGrenadeDamType via DHThrowableExplosiveDamageType)
+                    else if (class<ROGrenadeDamType>(DamageType) != none || class<ROTankShellExplosionDamage>(DamageType) != none || class<DHMortarDamageType>(DamageType) != none)
                     {
                         FFPenalty = FFExplosivesScale;
                     }
@@ -2211,7 +2199,7 @@ state RoundInPlay
         // Notify players that the map has been updated
         NotifyPlayersOfMapInfoChange(NEUTRAL_TEAM_INDEX, none, true);
 
-        ResetMortarTargets();
+        ResetArtilleryTargets();
 
         GRI.SpawnsRemaining[ALLIES_TEAM_INDEX] = LevelInfo.Allies.SpawnLimit;
         GRI.SpawnsRemaining[AXIS_TEAM_INDEX] = LevelInfo.Axis.SpawnLimit;
@@ -2433,7 +2421,6 @@ state RoundInPlay
         local int i, ArtilleryStrikeInt;
         local Controller P;
         local DHGameReplicationInfo GRI;
-        local DHPlayer PC;
 
         global.Timer();
 
@@ -2481,7 +2468,7 @@ state RoundInPlay
             ArtilleryStrikeInt = LevelInfo.GetStrikeInterval(i);
 
             // Artillery is not available if out of strikes, if still waiting on next call, or a strike is currently in progress
-            if ((GRI.TotalStrikes[i] < GRI.ArtilleryStrikeLimit[i]) && ElapsedTime > GRI.LastArtyStrikeTime[i] + ArtilleryStrikeInt && GRI.ArtyStrikeLocation[i] == vect(0.0, 0.0, 0.0))
+            if ((GRI.TotalStrikes[i] < GRI.ArtilleryStrikeLimit[i]) && ElapsedTime > (GRI.LastArtyStrikeTime[i] + ArtilleryStrikeInt) && GRI.ArtyStrikeLocation[i] == vect(0.0, 0.0, 0.0))
             {
                 GRI.bArtilleryAvailable[i] = 1;
             }
@@ -2498,17 +2485,10 @@ state RoundInPlay
             ChooseWinner();
         }
 
-        // Send "weapon unlock" notification to players
-        for (P = Level.ControllerList; P != none; P = P.nextController)
+        // Check whether local player has his weapons locked, but it's now time to unlock them (applies to single player or listen server host)
+        if (DHPlayer(Level.GetLocalPlayerController()) != none)
         {
-            PC = DHPlayer(P);
-
-            if (PC != none && PC.bAreWeaponsLocked && ElapsedTime > PC.WeaponUnlockTime)
-            {
-                PC.bAreWeaponsLocked = false;
-
-                PC.ReceiveLocalizedMessage(class'DHWeaponsLockedMessage', 2);
-            }
+            DHPlayer(Level.GetLocalPlayerController()).CheckUnlockWeapons();
         }
     }
 }
@@ -2686,7 +2666,7 @@ function CheckMineVolumes()
     }
 }
 
-function ResetMortarTargets()
+function ResetArtilleryTargets()
 {
     local DHGameReplicationInfo GRI;
 
@@ -2694,7 +2674,7 @@ function ResetMortarTargets()
 
     if (GRI != none)
     {
-        GRI.ClearAllMortarTargets();
+        GRI.ClearAllArtilleryTargets();
     }
 }
 
@@ -2915,7 +2895,9 @@ exec function CaptureObj(int Team)
 
     for (i = 0; i < arraycount(DHObjectives); ++i)
     {
-        if (DHObjectives[i].bActive && DHObjectives[i].ObjState != Team)
+        if (DHObjectives[i] != none &&
+            DHObjectives[i].bActive &&
+            DHObjectives[i].ObjState != Team)
         {
             DHObjectives[i].ObjectiveCompleted(none, Team);
 
@@ -3232,7 +3214,7 @@ function bool ChangeTeam(Controller Other, int Num, bool bNewTeam)
 
     if (GRI != none)
     {
-        GRI.ClearMortarTarget(DHPlayer(Other));
+        GRI.ClearArtilleryTarget(DHPlayer(Other));
     }
 
     if (PC != none)
@@ -3793,7 +3775,7 @@ function NotifyLogout(Controller Exiting)
 
     if (GRI != none && PC != none)
     {
-        GRI.ClearMortarTarget(PC);
+        GRI.ClearArtilleryTarget(PC);
         GRI.UnreserveVehicle(PC);
 
         PRI = DHPlayerReplicationInfo(PC.PlayerReplicationInfo);
@@ -4320,7 +4302,7 @@ defaultproperties
     RussianNames(13)="Telly Savalas"
     RussianNames(14)="Audie Murphy"
     RussianNames(15)="George Baker"
-    GermanNames(0)="GÃ¼nther Liebing"
+    GermanNames(0)="Günther Liebing"
     GermanNames(1)="Heinz Werner"
     GermanNames(2)="Rudolf Giesler"
     GermanNames(3)="Seigfried Hauber"
@@ -4329,10 +4311,10 @@ defaultproperties
     GermanNames(6)="Willi Eiken"
     GermanNames(7)="Wolfgang Steyer"
     GermanNames(8)="Rolf Steiner"
-    GermanNames(9)="Anton MÃ¼ller"
+    GermanNames(9)="Anton Müller"
     GermanNames(10)="Klaus Triebig"
-    GermanNames(11)="Hans GrÃ¼schke"
-    GermanNames(12)="Wilhelm KrÃ¼ger"
+    GermanNames(11)="Hans Grüschke"
+    GermanNames(12)="Wilhelm Krüger"
     GermanNames(13)="Herrmann Dietrich"
     GermanNames(14)="Erich Klein"
     GermanNames(15)="Horst Altmann"
@@ -4367,9 +4349,10 @@ defaultproperties
     ReinforcementMessagePercentages(3)=0.0
 
     Begin Object Class=UVersion Name=VersionObject
-        Major=7
-        Minor=1
+        Major=8
+        Minor=0
         Patch=0
+        Prerelease="dev"
     End Object
     Version=VersionObject
 
@@ -4380,9 +4363,13 @@ defaultproperties
     bPublicPlay=true
 
     WeaponLockTimes(0)=0
-    WeaponLockTimes(1)=5
-    WeaponLockTimes(2)=15
-    WeaponLockTimes(3)=30
-    WeaponLockTimes(4)=45
-    WeaponLockTimes(5)=60
+    WeaponLockTimes(1)=0
+    WeaponLockTimes(2)=5
+    WeaponLockTimes(3)=10
+    WeaponLockTimes(4)=15
+    WeaponLockTimes(5)=20
+    WeaponLockTimes(6)=25
+    WeaponLockTimes(7)=30
+    WeaponLockTimes(8)=45
+    WeaponLockTimes(9)=60
 }

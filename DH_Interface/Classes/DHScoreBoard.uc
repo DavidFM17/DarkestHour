@@ -77,7 +77,7 @@ private static function bool PRIAlphabeticalComparatorFunction(Object A, Object 
 }
 
 // Emptied out as instead we use the PRIComparator object & it's own functions, as above
-simulated function SortPRIArray() ;
+simulated function SortPRIArray();
 simulated function bool InOrder(PlayerReplicationInfo P1, PlayerReplicationInfo P2) { return true;}
 
 // Emptied out as these ROScoreBoard functions were never used, so just to de-clutter & avoid possible confusion
@@ -88,9 +88,9 @@ simulated function float DrawHeaders(Canvas C) { return 0.0;}
 // Also adds some extra information in the scoreboard header
 simulated function UpdateScoreBoard(Canvas C)
 {
-    local array<DHPlayerReplicationInfo> AxisPRI, AlliesPRI, UnassignedPRI;
-    local DHPlayerReplicationInfo        PRI;
-    local DHPlayerReplicationInfo        MyPRI;
+    local array<ROPlayerReplicationInfo> AxisPRI, AlliesPRI, UnassignedPRI;
+    local ROPlayerReplicationInfo        PRI;
+    local PlayerReplicationInfo          MyPRI;
     local DHGameReplicationInfo          DHGRI;
     local class<DHHud>                   HUD;
     local color  TeamColor, PlayerNameColor;
@@ -103,7 +103,7 @@ simulated function UpdateScoreBoard(Canvas C)
 
     if (PlayerController(Owner) != none)
     {
-        MyPRI = DHPlayerReplicationInfo(PlayerController(Owner).PlayerReplicationInfo);
+        MyPRI = PlayerController(Owner).PlayerReplicationInfo;
         DHGRI = DHGameReplicationInfo(GRI);
         HUD = class<DHHud>(HudClass);
     }
@@ -133,7 +133,7 @@ simulated function UpdateScoreBoard(Canvas C)
     // Assign all players to relevant array of PRIs for their team or unassigned/spectators
     for (i = 0; i < GRI.PRIArray.Length; ++i)
     {
-        PRI = DHPlayerReplicationInfo(GRI.PRIArray[i]);
+        PRI = ROPlayerReplicationInfo(GRI.PRIArray[i]);
 
         if (PRI != none)
         {
@@ -351,11 +351,7 @@ simulated function UpdateScoreBoard(Canvas C)
         }
 
         // Set drawing color & any name suffix text
-        if ((bHighlight && MyPRI.IsInSquad()) || class'DHPlayerReplicationInfo'.static.IsInSameSquad(MyPRI, AxisPRI[i]))
-        {
-            PlayerNameColor = class'DHColor'.default.SquadColor;
-        }
-        else if (DHGRI.bPlayerMustReady && !AxisPRI[i].bReadyToPlay && !AxisPRI[i].bBot && Level.NetMode != NM_Standalone)
+        if (DHGRI.bPlayerMustReady && !AxisPRI[i].bReadyToPlay && !AxisPRI[i].bBot && Level.NetMode != NM_Standalone)
         {
             PlayerNameColor = HUD.default.GrayColor;
 
@@ -537,11 +533,7 @@ simulated function UpdateScoreBoard(Canvas C)
         }
 
         // Set drawing color & any name suffix text
-        if ((bHighlight && MyPRI.IsInSquad()) || class'DHPlayerReplicationInfo'.static.IsInSameSquad(MyPRI, AlliesPRI[i]))
-        {
-            PlayerNameColor = class'DHColor'.default.SquadColor;
-        }
-        else if (DHGRI.bPlayerMustReady && !AlliesPRI[i].bReadyToPlay && !AlliesPRI[i].bBot && Level.NetMode != NM_Standalone)
+        if (DHGRI.bPlayerMustReady && !AlliesPRI[i].bReadyToPlay && !AlliesPRI[i].bBot && Level.NetMode != NM_Standalone)
         {
             PlayerNameColor = HUD.default.GrayColor;
 

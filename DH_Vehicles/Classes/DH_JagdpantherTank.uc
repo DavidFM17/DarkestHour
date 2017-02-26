@@ -44,7 +44,7 @@ defaultproperties
     UFrontArmorSlope=55.0
     URightArmorSlope=30.0
     ULeftArmorSlope=30.0
-    URearArmorSlope=25.0
+    URearArmorSlope=-25.0
     PointValue=4.0
     MaxPitchSpeed=80.0
     TreadVelocityScale=172.0
@@ -81,7 +81,7 @@ defaultproperties
     RightWheelBones(8)="Wheel_R_9"
     RightWheelBones(9)="Wheel_R_10"
     WheelRotationScale=750
-    TreadHitMinAngle=1.5
+    TreadHitMaxHeight=60.0
     FrontRightAngle=27.0
     RearRightAngle=153.0
     GearRatios(4)=0.8

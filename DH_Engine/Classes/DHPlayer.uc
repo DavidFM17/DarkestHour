@@ -17,7 +17,6 @@ var     float                   MapVoteTime;
 var     DH_LevelInfo            ClientLevelInfo;
 
 // DH sway values
-var     InterpCurve             BobCurve;                   // the amount of weapon bob to apply based on an input time in ironsights
 var     float                   DHSwayElasticFactor;
 var     float                   DHSwayDampingFactor;
 
@@ -56,20 +55,18 @@ var     bool                    bSpawnedKilled;             // player was spawn 
 var     int                     NextSpawnTime;              // the next time the player will be able to spawn
 var     int                     LastKilledTime;             // the time at which last death occured
 var     int                     NextVehicleSpawnTime;       // the time at which a player can spawn a vehicle next (this gets set when a player spawns a vehicle)
-
 var     int                     DHPrimaryWeapon;            // Picking up RO's slack, this should have been replicated from the outset
 var     int                     DHSecondaryWeapon;
-
 var     bool                    bSpawnPointInvalidated;
-
 var     float                   NextChangeTeamTime;         // the time at which a player can change teams next (updated in Level.Game.ChangeTeam)
 var     int                     DeathPenaltyCount;          // number of deaths accumulated that affects respawn time (only increases if bUseDeathPenalty is enabled)
                                                             // it resets whenever an objective is taken
 
-// Weapon locking
-var     bool                    bAreWeaponsLocked;          // server-side only, flag used for sending unlocked message after timer expires (done in DarkestHourGame.Timer)
-var     int                     WeaponUnlockTime;           // the time (relative to ElpasedTime) at which the player's weapons will be unlocked
-var     int                     WeaponLockViolations;       // the number of violations this player has
+// Weapon locking (punishment for spawn killing)
+var     int                     WeaponUnlockTime;           // the time at which the player's weapons will be unlocked (being the round's future ElapsedTime in whole seconds)
+var     int                     PendingWeaponLockSeconds ;  // fix for problem where player re-joins server with saved weapon lock, but client doesn't yet have GRI
+var     int                     WeaponLockViolations;       // the number of violations this player has, used to increase the locked period for multiple offences
+var     bool                    bWeaponsAreLocked;          // flag only used so we know an unlock message needs to be displayed locally after the locked time expires
 
 // Squads
 var     DHSquadReplicationInfo  SquadReplicationInfo;
@@ -106,9 +103,10 @@ replication
     reliable if (bNetDirty && Role == ROLE_Authority)
         bIsInStateMantling;
 
+    // Functions a client can call on the server
     reliable if (Role < ROLE_Authority)
         ServerLoadATAmmo, ServerThrowMortarAmmo,
-        ServerSaveMortarTarget, ServerSetPlayerInfo, ServerClearObstacle,
+        ServerSaveArtilleryTarget, ServerSetPlayerInfo, ServerClearObstacle,
         // these ones in debug mode only
         ServerLeaveBody, ServerPossessBody, ServerDebugObstacles, ServerDoLog,
         ServerMetricsDump, ServerLockWeapons,
@@ -129,7 +127,7 @@ replication
         ServerSetIsInSpawnMenu;
 }
 
-function ServerChangePlayerInfo(byte newTeam, byte newRole, byte NewWeapon1, byte NewWeapon2) { } // No longer used
+function ServerChangePlayerInfo(byte newTeam, byte newRole, byte NewWeapon1, byte NewWeapon2) { } // no longer used
 
 // Modified to bypass RO design
 event InitInputSystem()
@@ -151,6 +149,26 @@ simulated event PostBeginPlay()
             break;
         }
     }
+}
+
+// Modified to add hacky fix for problem where player re-joins a server with an active weapon lock saved in his DHPlayerSession
+// When that happens the weapon lock is passed to the client, but it doesn't yet have a GRI reference so it all goes wrong
+// In that situation we record a PendingWeaponLockSeconds  on client, then here we use it to set the weapon lock on client as soon as it receives the GRI
+simulated function PostNetReceive()
+{
+    if (PendingWeaponLockSeconds  > 0 && GameReplicationInfo != none)
+    {
+        LockWeapons(PendingWeaponLockSeconds );
+        PendingWeaponLockSeconds  = 0;
+    }
+
+    super.PostNetReceive();
+}
+
+// Modified so we don't disable PostNetReceive() until we've received the GRI, which allows PendingWeaponLockSeconds  functionality to work
+simulated function bool NeedNetNotify()
+{
+    return super.NeedNetNotify() || GameReplicationInfo == none;
 }
 
 // Matt: modified to avoid "accessed none" error
@@ -410,7 +428,7 @@ simulated function PlayerWhizzed(float DistSquared)
 {
     local float Intensity;
 
-    // The magic number below is 75% of the radius of DHBulletWhipAttachment squared!
+    // The magic number below is 75% of the radius of DHBulletWhipAttachment squared (we don't want a flinch on the more distant shots)
     Intensity = 1.0 - ((FMin(DistSquared, 16875.0)) / 16875.0);
 
     AddBlur(0.85, Intensity);
@@ -464,23 +482,23 @@ simulated function PlayerFlinched(float Intensity)
 
 // Updated to allow Yaw limits for mantling
 // Also to disable sway on bolt rifles between shots (while weapon is lowered from face)
-function UpdateRotation(float DeltaTime, float maxPitch)
+function UpdateRotation(float DeltaTime, float MaxPitch)
 {
-    local rotator   NewRotation, ViewRotation;
-    local ROVehicle ROVeh;
     local DHPawn    DHPwn;
     local ROWeapon  ROWeap;
+    local ROVehicle ROVeh;
+    local rotator   NewRotation, ViewRotation;
     local float     TurnSpeedFactor;
-
-    DHPwn = DHPawn(Pawn);
-    ROVeh = ROVehicle(Pawn);
 
     if (Pawn != none)
     {
+        DHPwn = DHPawn(Pawn);
         ROWeap = ROWeapon(Pawn.Weapon);
+        ROVeh = ROVehicle(Pawn);
     }
 
-    if (bSway && Pawn != none && !Pawn.bBipodDeployed && Pawn.Weapon != none && Pawn.Weapon.bCanSway && Pawn.Weapon.bUsingSights && ROWeap != none && !ROWeap.bWaitingToBolt)
+    // Handle any sway if ironsighted
+    if (bSway && Pawn != none && !Pawn.bBipodDeployed && ROWeap != none && ROWeap.bCanSway && ROWeap.bUsingSights && !ROWeap.bWaitingToBolt)
     {
         SwayHandler(DeltaTime);
     }
@@ -493,6 +511,7 @@ function UpdateRotation(float DeltaTime, float maxPitch)
         SwayTime = 0.0;
     }
 
+    // View shake (& exit) if interpolating
     if (bInterpolating || (Pawn != none && Pawn.bInterpolating))
     {
         ViewShake(DeltaTime);
@@ -500,12 +519,12 @@ function UpdateRotation(float DeltaTime, float maxPitch)
         return;
     }
 
-    // Added FreeCam control for better view control
+    // Using FreeCam for better view control
     if (bFreeCam)
     {
         if (bHudLocksPlayerRotation)
         {
-            // No camera change if we're locking rotation
+            // no camera change if we're locking rotation
         }
         else if (bFreeCamZoom)
         {
@@ -526,9 +545,9 @@ function UpdateRotation(float DeltaTime, float maxPitch)
     {
         ViewRotation = Rotation;
 
+        // Ensure we are not setting the pawn to a rotation beyond its desired
         if (Pawn != none && Pawn.Physics != PHYS_Flying)
         {
-            // Ensure we are not setting the pawn to a rotation beyond its desired
             if (Pawn.DesiredRotation.Roll < 65535 && (ViewRotation.Roll < Pawn.DesiredRotation.Roll || ViewRotation.Roll > 0))
             {
                 ViewRotation.Roll = 0;
@@ -539,33 +558,40 @@ function UpdateRotation(float DeltaTime, float maxPitch)
             }
         }
 
-        DesiredRotation = ViewRotation; // save old rotation
-
+        // Save old rotation & do some resets
+        DesiredRotation = ViewRotation;
         TurnTarget = none;
         bRotateToDesired = false;
         bSetTurnRot = false;
 
-        // Begin handling turning speed
-        TurnSpeedFactor = DHStandardTurnSpeedFactor;
-
-        // Lower look sensitivity for when resting weapon
+        // Calculate any turning speed adjustments
         if (DHPwn != none && DHPwn.bRestingWeapon)
         {
-            TurnSpeedFactor = DHHalfTurnSpeedFactor;
+            TurnSpeedFactor = DHHalfTurnSpeedFactor; // start with lower look sensitivity for when resting weapon
+        }
+        else
+        {
+            TurnSpeedFactor = DHStandardTurnSpeedFactor;
         }
 
-        // if sniper scope or binoc
-        if (ROWeap != none &&
-            (ROWeap.bPlayerViewIsZoomed || (ROWeap.IsA('DHBinocularsItem') && ROWeap.bPlayerViewIsZoomed)))
+        if (ROWeap != none && ROWeap.bPlayerViewIsZoomed)
         {
-            TurnSpeedFactor *= DHScopeTurnSpeedFactor;
+            TurnSpeedFactor *= DHScopeTurnSpeedFactor; // reduce if player is using a sniper scope or binocs
         }
-        else if (DHPwn != none && (DHPwn.bIronSights || DHPwn.bBipodDeployed))
+        else if (DHPwn != none)
         {
-            TurnSpeedFactor *= DHISTurnSpeedFactor;
+            if (DHPwn.bIronSights || DHPwn.bBipodDeployed)
+            {
+                TurnSpeedFactor *= DHISTurnSpeedFactor; // reduce if player is using ironsights or is bipod deployed
+            }
+        }
+        else if (ROVeh != none && ROVeh.DriverPositions[ROVeh.DriverPositionIndex].bDrawOverlays && ROVeh.HUDOverlay == none
+            && DHArmoredVehicle(ROVeh) != none && DHArmoredVehicle(ROVeh).PeriscopeOverlay != none)
+        {
+            TurnSpeedFactor *= DHISTurnSpeedFactor; // reduce if player is driving an armored vehicle & using a periscope
         }
 
-        // Handle viewrotation
+        // Calculate base for new view rotation, factoring in any turning speed reduction & applying max value limits
         ViewRotation.Yaw += FClamp((TurnSpeedFactor * DeltaTime * aTurn), -10000.0, 10000.0);
         ViewRotation.Pitch += FClamp((TurnSpeedFactor * DeltaTime * aLookUp), -10000.0, 10000.0);
 
@@ -580,38 +606,43 @@ function UpdateRotation(float DeltaTime, float maxPitch)
             ViewRotation = rotator(Normal(LookTarget.Location - (Pawn.Location + Pawn.EyePosition())));
         }
 
+        // Apply any pawn limits on pitch & yaw
         if (DHPwn != none)
         {
+            if (DHPwn.Weapon != none)
+            {
+                ViewRotation = FreeAimHandler(ViewRotation, DeltaTime);
+            }
+
             ViewRotation.Pitch = DHPwn.LimitPitch(ViewRotation.Pitch, DeltaTime);
-        }
 
-        if (DHPwn != none && (DHPwn.bBipodDeployed || DHPwn.bIsMantling || DHPwn.bIsDeployingMortar || DHPwn.bIsCuttingWire))
-        {
-            DHPwn.LimitYaw(ViewRotation.Yaw);
+            if (DHPwn.bBipodDeployed || DHPwn.bIsMantling || DHPwn.bIsDeployingMortar || DHPwn.bIsCuttingWire)
+            {
+                DHPwn.LimitYaw(ViewRotation.Yaw);
+            }
         }
-
-        // Limit Pitch and yaw for the ROVehicles
-        if (ROVeh != none)
+        else if (ROVeh != none)
         {
-            ViewRotation.Yaw = ROVeh.LimitYaw(ViewRotation.Yaw);
             ViewRotation.Pitch = ROVeh.LimitPawnPitch(ViewRotation.Pitch);
+            ViewRotation.Yaw = ROVeh.LimitYaw(ViewRotation.Yaw);
         }
 
+        // Apply any sway
         ViewRotation.Yaw += SwayYaw;
         ViewRotation.Pitch += SwayPitch;
 
+        // Set new view rotation & do any view shake
         SetRotation(ViewRotation);
 
         ViewShake(DeltaTime);
         ViewFlash(DeltaTime);
 
-        NewRotation = ViewRotation;
-
-        NewRotation.Roll = Rotation.Roll;
-
-        if (!bRotateToDesired && Pawn != none && (!bFreeCamera || !bBehindView))
+        // Make pawn face towards new view rotation (applied only to a DHPawn as vehicles ignore FaceRotation)
+        if (!bRotateToDesired && DHPwn != none && (!bFreeCamera || !bBehindView))
         {
-            Pawn.FaceRotation(NewRotation, DeltaTime);
+            NewRotation = ViewRotation;
+            NewRotation.Roll = Rotation.Roll;
+            DHPwn.FaceRotation(NewRotation, DeltaTime);
         }
     }
 }
@@ -722,6 +753,28 @@ function HitThis(ROArtilleryTrigger RAT)
     }
 }
 
+// New function to determine if the player is operating a vehicle that is marked as artillery.
+simulated function bool IsInArtilleryVehicle()
+{
+    local DHVehicle V;
+    local VehicleWeaponPawn VWP;
+
+    V = DHVehicle(Pawn);
+    VWP = VehicleWeaponPawn(Pawn);
+
+    if (VWP != none)
+    {
+        V = DHVehicle(VWP.VehicleBase);
+    }
+
+    if (V != none)
+    {
+        return V.bIsArtilleryVehicle;
+    }
+
+    return false;
+}
+
 // Modified to to spawn a DHArtillerySpawner at the strike co-ords instead of using level's NorthEastBoundsspawn to set its height
 // The spawner then simply spawns shell's a fixed height above strike location, & it doesn't need to record OriginalArtyLocation as can simply use its own location
 function ServerArtyStrike()
@@ -732,19 +785,19 @@ function ServerArtyStrike()
     }
 }
 
-// New function for mortar observer role to mark a mortar target on the map
-function ServerSaveMortarTarget(bool bIsSmoke)
+// New function for artillery observer role to mark an artillery target on the map
+function ServerSaveArtilleryTarget(bool bIsSmoke)
 {
     local DHGameReplicationInfo GRI;
     local DHVolumeTest VT;
     local vector       HitLocation, HitNormal, TraceStart, TraceEnd;
     local int          TeamIndex, i;
-    local bool         bValidTarget, bMortarsAvailable, bMortarTargetMarked;
+    local bool         bValidTarget, bArtilleryTargetMarked;
 
     TraceStart = Pawn.Location + Pawn.EyePosition();
     TraceEnd = TraceStart + (GetMaxViewDistance() * vector(Rotation));
 
-    // First check that the mortar target is not in a no arty volume
+    // First check that the artillery target is not in a no arty volume
     if (Trace(HitLocation, HitNormal, TraceEnd, TraceStart, true) != none)
     {
         VT = Spawn(class'DHVolumeTest', self,, HitLocation);
@@ -758,7 +811,7 @@ function ServerSaveMortarTarget(bool bIsSmoke)
 
     if (!bValidTarget)
     {
-        ReceiveLocalizedMessage(class'DHMortarTargetMessage', 0); // "Invalid mortar target"
+        ReceiveLocalizedMessage(class'DHArtilleryTargetMessage', 0); // "Invalid artillery target"
 
         return;
     }
@@ -766,109 +819,78 @@ function ServerSaveMortarTarget(bool bIsSmoke)
     TeamIndex = GetTeamNum();
     GRI = DHGameReplicationInfo(GameReplicationInfo);
 
-    // Make sure there is a mortar operator available on our team
-    if (TeamIndex == AXIS_TEAM_INDEX)
-    {
-        for (i = 0; i < arraycount(GRI.DHAxisRoles); ++i)
-        {
-            if (GRI.DHAxisRoles[i]!= none && GRI.DHAxisRoles[i].bCanUseMortars && GRI.DHAxisRoleCount[i] > 0)
-            {
-                bMortarsAvailable = true;
-                break;
-            }
-        }
-    }
-    else if (TeamIndex == ALLIES_TEAM_INDEX)
-    {
-        for (i = 0; i < arraycount(GRI.DHAlliesRoles); ++i)
-        {
-            if (GRI.DHAlliesRoles[i] != none && GRI.DHAlliesRoles[i].bCanUseMortars && GRI.DHAlliesRoleCount[i] > 0)
-            {
-                bMortarsAvailable = true;
-                break;
-            }
-        }
-    }
-
-    if (!bMortarsAvailable)
-    {
-        ReceiveLocalizedMessage(class'DHMortarTargetMessage', 1); // "There are no mortar operators available"
-
-        return;
-    }
-
     HitLocation.Z = 0.0; // zero out the z coordinate for 2D distance checking on round hits
 
-    // Axis team - go through team's mortar targets list to make sure we are able to mark a target & there's an available slot
+    // Axis team - go through team's artillery targets list to make sure we are able to mark a target & there's an available slot
     if (TeamIndex == AXIS_TEAM_INDEX)
     {
-        for (i = 0; i < arraycount(GRI.GermanMortarTargets); ++i)
+        for (i = 0; i < arraycount(GRI.GermanArtilleryTargets); ++i)
         {
-            // Make sure this player hasn't set a mortar target in the last 30 seconds
-            if (GRI.GermanMortarTargets[i].Controller == self && (Level.TimeSeconds - GRI.GermanMortarTargets[i].Time) < MORTAR_TARGET_TIME_INTERVAL)
+            // Make sure this player hasn't set an artillery target in the last 30 seconds
+            if (GRI.GermanArtilleryTargets[i].Controller == self && (Level.TimeSeconds - GRI.GermanArtilleryTargets[i].Time) < MORTAR_TARGET_TIME_INTERVAL)
             {
-                ReceiveLocalizedMessage(class'DHMortarTargetMessage', 4); // "You cannot mark another mortar target marker yet"
+                ReceiveLocalizedMessage(class'DHArtilleryTargetMessage', 4); // "You cannot mark another artillery target marker yet"
 
                 return;
             }
 
-            // Find an available slot in our team's mortar targets list (an empty slot or our own current marked target)
-            if (GRI.GermanMortarTargets[i].Controller == none || GRI.GermanMortarTargets[i].Controller == self || !GRI.GermanMortarTargets[i].bIsActive)
+            // Find an available slot in our team's artillery targets list (an empty slot or our own current marked target)
+            if (GRI.GermanArtilleryTargets[i].Controller == none || GRI.GermanArtilleryTargets[i].Controller == self || !GRI.GermanArtilleryTargets[i].bIsActive)
             {
-                GRI.GermanMortarTargets[i].bIsActive = true;
-                GRI.GermanMortarTargets[i].Controller = self;
-                GRI.GermanMortarTargets[i].HitLocation = vect(0.0, 0.0, 0.0);
-                GRI.GermanMortarTargets[i].Location = HitLocation;
-                GRI.GermanMortarTargets[i].Time = Level.TimeSeconds;
-                GRI.GermanMortarTargets[i].bIsSmoke = bIsSmoke;
+                GRI.GermanArtilleryTargets[i].bIsActive = true;
+                GRI.GermanArtilleryTargets[i].Controller = self;
+                GRI.GermanArtilleryTargets[i].HitLocation = vect(0.0, 0.0, 0.0);
+                GRI.GermanArtilleryTargets[i].Location = HitLocation;
+                GRI.GermanArtilleryTargets[i].Time = Level.TimeSeconds;
+                GRI.GermanArtilleryTargets[i].bIsSmoke = bIsSmoke;
 
-                bMortarTargetMarked = true;
+                bArtilleryTargetMarked = true;
                 break;
             }
         }
     }
-    // Allies team - go through team's mortar targets list to make sure we are able to mark a target & there's an available slot
+    // Allies team - go through team's artillery targets list to make sure we are able to mark a target & there's an available slot
     else if (TeamIndex == ALLIES_TEAM_INDEX)
     {
-        for (i = 0; i < arraycount(GRI.AlliedMortarTargets); ++i)
+        for (i = 0; i < arraycount(GRI.AlliedArtilleryTargets); ++i)
         {
-            if (GRI.AlliedMortarTargets[i].Controller == self && (Level.TimeSeconds - GRI.AlliedMortarTargets[i].Time) < MORTAR_TARGET_TIME_INTERVAL)
+            if (GRI.AlliedArtilleryTargets[i].Controller == self && (Level.TimeSeconds - GRI.AlliedArtilleryTargets[i].Time) < MORTAR_TARGET_TIME_INTERVAL)
             {
-                ReceiveLocalizedMessage(class'DHMortarTargetMessage', 4);
+                ReceiveLocalizedMessage(class'DHArtilleryTargetMessage', 4);
 
                 return;
             }
 
-            if (GRI.AlliedMortarTargets[i].Controller == none || GRI.AlliedMortarTargets[i].Controller == self || !GRI.AlliedMortarTargets[i].bIsActive)
+            if (GRI.AlliedArtilleryTargets[i].Controller == none || GRI.AlliedArtilleryTargets[i].Controller == self || !GRI.AlliedArtilleryTargets[i].bIsActive)
             {
-                GRI.AlliedMortarTargets[i].bIsActive = true;
-                GRI.AlliedMortarTargets[i].Controller = self;
-                GRI.AlliedMortarTargets[i].HitLocation = vect(0.0, 0.0, 0.0);
-                GRI.AlliedMortarTargets[i].Location = HitLocation;
-                GRI.AlliedMortarTargets[i].Time = Level.TimeSeconds;
-                GRI.AlliedMortarTargets[i].bIsSmoke = bIsSmoke;
+                GRI.AlliedArtilleryTargets[i].bIsActive = true;
+                GRI.AlliedArtilleryTargets[i].Controller = self;
+                GRI.AlliedArtilleryTargets[i].HitLocation = vect(0.0, 0.0, 0.0);
+                GRI.AlliedArtilleryTargets[i].Location = HitLocation;
+                GRI.AlliedArtilleryTargets[i].Time = Level.TimeSeconds;
+                GRI.AlliedArtilleryTargets[i].bIsSmoke = bIsSmoke;
 
-                bMortarTargetMarked = true;
+                bArtilleryTargetMarked = true;
                 break;
             }
         }
     }
 
     // Display success or failure screen message to player
-    if (bMortarTargetMarked)
+    if (bArtilleryTargetMarked)
     {
         if (bIsSmoke)
         {
-            Level.Game.BroadcastLocalizedMessage(class'DHMortarTargetMessage', 3, PlayerReplicationInfo); // "PlayerName has marked a mortar high-explosive target"
+            Level.Game.BroadcastLocalizedMessage(class'DHArtilleryTargetMessage', 3, PlayerReplicationInfo); // "PlayerName has marked a mortar high-explosive target"
         }
         else
         {
-            Level.Game.BroadcastLocalizedMessage(class'DHMortarTargetMessage', 2, PlayerReplicationInfo); // "PlayerName has marked a mortar smoke target"
+            Level.Game.BroadcastLocalizedMessage(class'DHArtilleryTargetMessage', 2, PlayerReplicationInfo); // "PlayerName has marked a mortar smoke target"
         }
     }
     else
     {
-        ReceiveLocalizedMessage(class'DHMortarTargetMessage', 6); // "There are too many active mortar targets"
+        ReceiveLocalizedMessage(class'DHArtilleryTargetMessage', 6); // "There are too many active artillery targets"
     }
 }
 
@@ -883,44 +905,34 @@ simulated function float GetMaxViewDistance()
     return super.GetMaxViewDistance();
 }
 
-// Overridden to handle separate MG and AT resupply as well as assisted AT loading
+// Modified to handle separate MG & AT resupply as well as assisted AT loading
+// Uses our pawn's AutoTraceActor instead of the HUD's NamedPlayer, which is deprecated (AutoTrace now registers DHPawns so this works fine)
 exec function ThrowMGAmmo()
 {
     local DHPawn MyPawn, OtherPawn;
-    local Actor  HitActor;
-    local vector HitLocation, HitNormal, TraceStart, TraceEnd;
-    local float  TraceDistance;
 
     MyPawn = DHPawn(Pawn);
 
-    if (MyPawn == none)
+    if (MyPawn != none)
     {
-        return;
-    }
+        OtherPawn = DHPawn(MyPawn.AutoTraceActor);
 
-    TraceDistance = class'DHUnits'.static.MetersToUnreal(2.0);
-    TraceStart = MyPawn.Location + MyPawn.EyePosition();
-    TraceEnd = TraceStart + (vector(Rotation) * TraceDistance);
-
-    HitActor = Trace(HitLocation, HitNormal, TraceEnd, TraceStart, true);
-
-    OtherPawn = DHPawn(HitActor);
-
-    if (OtherPawn != none)
-    {
-        if (!MyPawn.bUsedCarriedMGAmmo && OtherPawn.bWeaponNeedsResupply)
+        if (OtherPawn != none)
         {
-            ServerThrowMGAmmo(OtherPawn);
-        }
+            if (!MyPawn.bUsedCarriedMGAmmo && OtherPawn.bWeaponNeedsResupply)
+            {
+                ServerThrowMGAmmo(OtherPawn);
+            }
 
-        if (OtherPawn.bWeaponNeedsReload)
-        {
-            ServerLoadATAmmo(OtherPawn);
+            if (OtherPawn.bWeaponNeedsReload)
+            {
+                ServerLoadATAmmo(OtherPawn);
+            }
         }
-    }
-    else if (DHMortarVehicle(HitActor) != none)
-    {
-        ServerThrowMortarAmmo(DHMortarVehicle(HitActor));
+        else if (DHMortarVehicle(MyPawn.AutoTraceActor) != none)
+        {
+            ServerThrowMortarAmmo(DHMortarVehicle(ROPawn(Pawn).AutoTraceActor));
+        }
     }
 }
 
@@ -1418,7 +1430,7 @@ state Mantling
             P.CancelMantle();
         }
 
-        if (bMantleDebug && Pawn != none && Pawn.IsLocallyControlled())
+        if (bMantleDebug)
         {
             ClientMessage("------------- End Mantle Debug -------------");
             Log("------------- End Mantle Debug -------------");
@@ -1774,43 +1786,22 @@ simulated function ResetSwayAfterBolt()
     SwayTime = 0.0;
 }
 
-// Called server-side by SendVoiceMessage()
+// Modified to allow mortar operator to make a resupply request
 function AttemptToAddHelpRequest(PlayerReplicationInfo PRI, int ObjID, int RequestType, optional vector RequestLocation)
 {
-    local DHGameReplicationInfo     GRI;
-    local DHRoleInfo                RI;
-    local DarkestHourGame           G;
-    local DHPlayerReplicationInfo   DHPRI;
+    local DHRoleInfo RI;
 
-    DHPRI = DHPlayerReplicationInfo(PRI);
+    RI = DHRoleInfo(GetRoleInfo());
 
-    if (DHPRI == none)
+    // Only allow if requesting player is a leader role or if he's a machine gunner or mortar operator requesting resupply
+    if (RI != none && (RI.bIsLeader || (RequestType == 3 && (RI.bIsGunner || RI.bCanUseMortars)))
+        && ROGameReplicationInfo(GameReplicationInfo) != none && PRI != none && PRI.Team != none)
     {
-        return;
-    }
+        ROGameReplicationInfo(GameReplicationInfo).AddHelpRequest(PRI, ObjID, RequestType, RequestLocation); // add to team's HelpRequests array
 
-    RI = DHRoleInfo(DHPRI.RoleInfo);
-
-    // Check if caller is a leader
-    if (RI == none || RequestType != 3 || (!RI.bIsGunner && !RI.bCanUseMortars))
-    {
-        // If not, check if we're a MG requesting ammo
-        // Basnett, added mortar operators requesting resupply.
-        return;
-    }
-
-    GRI = DHGameReplicationInfo(GameReplicationInfo);
-
-    if (GRI != none && PRI != none && PRI.bIsSpectator && PRI.Team != none)
-    {
-        GRI.AddHelpRequest(PRI, ObjID, RequestType, RequestLocation);
-
-        G = DarkestHourGame(Level.Game);
-
-        if (G != none)
+        if (DarkestHourGame(Level.Game) != none)
         {
-            // Notify team members to check their map
-            G.NotifyPlayersOfMapInfoChange(PRI.Team.TeamIndex, self);
+            DarkestHourGame(Level.Game).NotifyPlayersOfMapInfoChange(PRI.Team.TeamIndex, self); // notify team members to check their map
         }
     }
 }
@@ -2040,14 +2031,11 @@ function ServerToggleBehindView()
 {
     if (Level.NetMode == NM_Standalone || Level.Game.bAllowBehindView || PlayerReplicationInfo.bOnlySpectator)
     {
-        if (Level.NetMode == NM_Standalone || Level.NetMode == NM_ListenServer)
-        {
-            ClientSetBehindView(!bBehindView);
-        }
-        else
+        ClientSetBehindView(!bBehindView); // a standalone or owning listen server will get this
+
+        if (Viewport(Player) == none) // on a non-owning server, ClientSetBehindView() is sent to owning net client, so toggle server's local bBehindView setting
         {
             bBehindView = !bBehindView;
-            ClientSetBehindView(bBehindView);
         }
     }
 }
@@ -2116,7 +2104,7 @@ simulated function ResetSwayValues()
 simulated function SwayHandler(float DeltaTime)
 {
     local DHPawn P;
-    local float  WeaponSwayYawAcc, WeaponSwayPitchAcc, TimeFactor, BobFactor, StaminaFactor, DeltaSwayYaw, DeltaSwayPitch;
+    local float  WeaponSwayYawAcc, WeaponSwayPitchAcc, StaminaFactor, TimeFactor, DeltaSwayYaw, DeltaSwayPitch;
 
     P = DHPawn(Pawn);
 
@@ -2125,57 +2113,53 @@ simulated function SwayHandler(float DeltaTime)
         return;
     }
 
-    StaminaFactor = ((P.default.Stamina - P.Stamina) / P.default.Stamina) * 0.5; //50% stamina factor
     SwayTime += DeltaTime;
 
-    if (SwayClearTime >= 0.025)
+    // Apply random sway movement periodically (using SwayClearTime as timer)
+    if (SwayClearTime >= 0.025) // was 0.05
     {
         SwayClearTime = 0.0;
-        WeaponSwayYawAcc = RandRange(-baseSwayYawAcc, baseSwayYawAcc);
-        WeaponSwayPitchAcc = RandRange(-baseSwayPitchAcc, baseSwayPitchAcc);
+        WeaponSwayYawAcc = RandRange(-BaseSwayYawAcc, BaseSwayYawAcc);
+        WeaponSwayPitchAcc = RandRange(-BaseSwayPitchAcc, BaseSwayPitchAcc);
     }
     else
     {
+        SwayClearTime += DeltaTime;
         WeaponSwayYawAcc = 0.0;
         WeaponSwayPitchAcc = 0.0;
-        SwayClearTime += DeltaTime;
     }
 
-    // Get timefactor based on sway curve
+    // Modify sway based on how long the player has been holding the weapon ironsighted
+    StaminaFactor = ((P.default.Stamina - P.Stamina) / P.default.Stamina) * 0.5;
     TimeFactor = InterpCurveEval(SwayCurve, SwayTime);
 
-    // Get bobfactor based on bob curve
-    BobFactor = InterpCurveEval(BobCurve, SwayTime);
-
-    // Handle timefactor modifier & weapon bob for weapon type
     if (DHWeapon(P.Weapon) != none)
     {
-        TimeFactor *= DHWeapon(P.Weapon).SwayModifyFactor;
-        //P.IronSightBobFactor = BobFactor * DHWeapon(P.Weapon).BobModifyFactor;
+        TimeFactor *= DHWeapon(P.Weapon).SwayModifyFactor; // added option for weapon specific modifier
     }
 
-    // Add modifiers to sway for time in iron sights and stamina
     WeaponSwayYawAcc = (TimeFactor * WeaponSwayYawAcc) + (StaminaFactor * WeaponSwayYawAcc);
     WeaponSwayPitchAcc = (TimeFactor * WeaponSwayPitchAcc) + (StaminaFactor * WeaponSwayPitchAcc);
 
-    // Sway reduction for crouching, prone, and resting the weapon
+    // Reduce sway reduction if crouching, prone or resting the weapon
     if (P.bRestingWeapon)
     {
-        WeaponSwayYawAcc *= 0.1;
-        WeaponSwayPitchAcc *= 0.1;
+        WeaponSwayYawAcc *= 0.15; // both were 0.1
+        WeaponSwayPitchAcc *= 0.15;
     }
     else if (P.bIsCrouched)
     {
-        WeaponSwayYawAcc *= 0.5;
-        WeaponSwayPitchAcc *= 0.5;
+        WeaponSwayYawAcc *= 0.55; // both were 0.5
+        WeaponSwayPitchAcc *= 0.55;
     }
     else if (P.bIsCrawling)
     {
-        WeaponSwayYawAcc *= 0.25;
-        WeaponSwayPitchAcc *= 0.25;
+        WeaponSwayYawAcc *= 0.3;  // both were 0.15
+        WeaponSwayPitchAcc *= 0.3;
     }
 
-    if (P.IsProneTransitioning())
+    // Increase sway if getting up from prone or if leaning
+    if (P.IsProneTransitioning()) // added
     {
         WeaponSwayYawAcc *= 4.5;
         WeaponSwayPitchAcc *= 4.5;
@@ -2187,25 +2171,27 @@ simulated function SwayHandler(float DeltaTime)
         WeaponSwayPitchAcc *= 1.45;
     }
 
-    // Add a elastic and damping factor to get sway near the original aim-point and from causing wild oscillations
+    // Add an elastic factor to get sway near the original aim-point, & a damping factor to keep elastic factor from causing wild oscillations
     WeaponSwayYawAcc = WeaponSwayYawAcc - (DHSwayElasticFactor * SwayYaw) - (DHSwayDampingFactor * WeaponSwayYawRate);
     WeaponSwayPitchAcc = WeaponSwayPitchAcc - (DHSwayElasticFactor * SwayPitch) - (DHSwayDampingFactor * WeaponSwayPitchRate);
 
-    // Calculation for motion
-    DeltaSwayYaw = (WeaponSwayYawRate * DeltaTime) + (0.5 * WeaponSwayYawAcc * DeltaTime * DeltaTime);
-    DeltaSwayPitch = (WeaponSwayPitchRate * DeltaTime) + (0.5 * WeaponSwayPitchAcc * DeltaTime * DeltaTime);
-
-    // Add actual sway
-    SwayYaw += DeltaSwayYaw;
-    SwayPitch += DeltaSwayPitch;
-
+    // If weapon is rested, SwayYaw & SwayPitch are zero
     if (P.bRestingWeapon)
     {
         SwayYaw = 0.0;
         SwayPitch = 0.0;
     }
+    // Otherwise update SwayYaw & SwayPitch using basic equation of motion (deltaX = vt + 0.5 * a * t^2)
+    else
+    {
+        DeltaSwayYaw = (WeaponSwayYawRate * DeltaTime) + (0.5 * WeaponSwayYawAcc * DeltaTime * DeltaTime);
+        DeltaSwayPitch = (WeaponSwayPitchRate * DeltaTime) + (0.5 * WeaponSwayPitchAcc * DeltaTime * DeltaTime);
 
-    // Update new sway velocity (R = D*T)
+        SwayYaw += DeltaSwayYaw;
+        SwayPitch += DeltaSwayPitch;
+    }
+
+    // Update new weapon sway sway speed (R = D*T)
     WeaponSwayYawRate += WeaponSwayYawAcc * DeltaTime;
     WeaponSwayPitchRate += WeaponSwayPitchAcc * DeltaTime;
 }
@@ -2468,8 +2454,6 @@ function ServerSetPlayerInfo(byte newTeam, byte newRole, byte NewWeapon1, byte N
                 SpawnPointIndex = default.SpawnPointIndex;
                 VehiclePoolIndex = default.VehiclePoolIndex;
                 NextSpawnTime = default.NextSpawnTime;
-
-                Log("looks good!");
 
                 // this needs commented on what it is doing, in fact most of this function does, very hard to follow
                 ClientChangePlayerInfoResult(19);
@@ -2767,36 +2751,80 @@ function ServerSetManualTankShellReloading(bool bUseManualReloading)
     }
 }
 
-function LockWeapons(int Seconds)
+// New function to put player into 'weapon lock' for a specified number of seconds, during which time he won't be allowed to fire
+// In multi-player it is initially called on server & then on owning net client, via a replicated function call
+simulated function LockWeapons(int Seconds)
 {
-    if (Level != none && Level.Game != none && Level.Game.GameReplicationInfo != none && Seconds > 0)
+    if (Seconds > 0 && GameReplicationInfo != none)
     {
-        bAreWeaponsLocked = true;
         WeaponUnlockTime = GameReplicationInfo.ElapsedTime + Seconds;
 
-        // "Your weapons have been locked due to excessive spawn killing."
-        ReceiveLocalizedMessage(class'DHWeaponsLockedMessage', 0);
+        // If this is the local player, flag him as weapon locked & show him a warning screen message
+        // Note bWeaponsAreLocked is only used so we know an unlock message needs to be displayed locally after the locked time expires
+        // Setting a future WeaponUnlockTime is what actually prevents weapons being used
+        if (Viewport(Player) != none)
+        {
+            bWeaponsAreLocked = true;
+            ReceiveLocalizedMessage(class'DHWeaponsLockedMessage', 0); // "Your weapons have been locked due to excessive spawn killing!"
+
+            bFire = 0; // 'releases' fire button if being held down, which stops automatic weapon fire from continuing & avoids spamming repeated messages & buzz sounds
+            bAltFire = 0;
+        }
+        // Or a server calls replicated function to do similar on an owning net client (passing seconds as a byte for efficient replication)
+        else if (Role == ROLE_Authority)
+        {
+            ClientLockWeapons(byte(Seconds));
+        }
+    }
+    // Hacky fix for problem where player re-joins server with an active weapon lock saved in his DHPlayerSession, but client doesn't yet have GRI
+    // If we don't yet have GRI, we record a PendingWeaponLockSeconds  on client, then PostNetReceive() uses it to set weapon lock as soon as it receives GRI
+    else if (GameReplicationInfo == none)
+    {
+        PendingWeaponLockSeconds  = Seconds;
     }
 }
 
-simulated function bool IsWeaponLocked(optional out int WeaponLockTimeLeft)
+// New server-to-client replicated function to put owning net player into 'weapon lock' for a specified number of seconds, during which time he won't be allowed to fire
+simulated function ClientLockWeapons(byte Seconds)
 {
-    local DHGameReplicationInfo GRI;
-
-    GRI = DHGameReplicationInfo(GameReplicationInfo);
-
-    if (GRI != none)
+    if (Role < ROLE_Authority)
     {
-        WeaponLockTimeLeft = (WeaponUnlockTime - GRI.ElapsedTime);
+        LockWeapons(int(Seconds));
+    }
+}
+
+// New function to check whether player's weapons are locked (due to spawn killing) but are now due to be unlocked
+// Called from the 1 second timer running continually in the GameInfo & GRI actors (GRI for net clients)
+simulated function CheckUnlockWeapons()
+{
+    if (bWeaponsAreLocked && GameReplicationInfo != none && GameReplicationInfo.ElapsedTime >= WeaponUnlockTime)
+    {
+        bWeaponsAreLocked = false;
+        ReceiveLocalizedMessage(class'DHWeaponsLockedMessage', 2); // "Your weapons are now unlocked"
+    }
+}
+
+// New helper function to check whether player's weapons are locked due to spawn killing, so he's unable to fire, including warning message on screen
+simulated function bool AreWeaponsLocked(optional bool bNoScreenMessage)
+{
+    if (GameReplicationInfo != none && WeaponUnlockTime > GameReplicationInfo.ElapsedTime)
+    {
+        if (!bNoScreenMessage)
+        {
+            ReceiveLocalizedMessage(class'DHWeaponsLockedMessage', 1,,, self); // "Your weapons are locked for X seconds"
+        }
+
+        return true;
     }
 
-    return WeaponLockTimeLeft > 0;
+    return false;
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////
 //  *************************** DEBUG EXEC FUNCTIONS  *****************************  //
 ///////////////////////////////////////////////////////////////////////////////////////
 
+// New debug exec to put self into 'weapon lock' for specified number of seconds
 exec function DebugLockWeapons(int Seconds)
 {
     if (Level.NetMode == NM_Standalone || class'DH_LevelInfo'.static.DHDebugMode())
@@ -2807,7 +2835,7 @@ exec function DebugLockWeapons(int Seconds)
 
 function ServerLockWeapons(int Seconds)
 {
-    LockWeapons(SecondS);
+    LockWeapons(Seconds);
 }
 
 // Modified to work in debug mode, as well as in single player
@@ -2909,7 +2937,7 @@ exec function DebugSpawnBots(int Team, optional int Num, optional int Distance)
                     if (B.Pawn.SetLocation(TargetLocation + RandomOffset))
                     {
                         // If spawn & move successful, check if we've reached any specified number of bots to spawn (NumBots zero signifies no limit, so skip this check)
-                        if (DHG.NumBots > 0 && ++i >= DHG.NumBots)
+                        if (Num > 0 && ++i >= Num)
                         {
                             break;
                         }
@@ -3009,6 +3037,9 @@ exec function ClearArrows()
 
 // New exec that respawns the player, but leaves their old pawn body behind, frozen in the game
 // Optional bKeepPRI means the old body copy keeps a reference to the player's PRI, so it still shows your name in HUD, with any resupply/reload message
+// TODO: for some reason when you kill a 'LeaveBody' pawn that is not in a vehicle, the pawn actor does not get destroyed on the server
+// Debugged as far as it entering state Dying & in its BeginState() the LifeSpan being set to 1.0 second on a dedicated server
+// But something seems to override that as pawn isn't destroyed & if you log it later it has LifeSpan=0.0 (NB - it's still in state Dying, with no timer running)
 exec function LeaveBody(optional bool bKeepPRI)
 {
     local DHVehicleWeaponPawn WP;
@@ -3097,9 +3128,16 @@ function ServerLeaveBody(optional bool bKeepPRI)
 // New exec, used with LeaveBody(), as a clientside fix for annoying bug where old pawn's head shrinks to 10% size! - can be used when head location accuracy is important
 exec function FixPinHead()
 {
-    if ((Level.NetMode == NM_Standalone || class'DH_LevelInfo'.static.DHDebugMode()) && DHHud(myHud) != none && DHHud(myHud).NamedPlayer != none)
+    local ROPawn TargetPawn;
+
+    if ((Level.NetMode == NM_Standalone || class'DH_LevelInfo'.static.DHDebugMode()) && ROPawn(Pawn) != none)
     {
-        DHHud(myHud).NamedPlayer.SetHeadScale(DHHud(myHud).NamedPlayer.default.HeadScale);
+        TargetPawn = ROPawn(ROPawn(Pawn).AutoTraceActor);
+
+        if (TargetPawn != none)
+        {
+            TargetPawn.SetHeadScale(TargetPawn.default.HeadScale);
+        }
     }
 }
 
@@ -3107,12 +3145,10 @@ exec function FixPinHead()
 exec function PossessBody()
 {
     local Pawn   TargetPawn;
-    local vector HitLocation, HitNormal, ViewPos;
 
-    if ((Level.NetMode == NM_Standalone || class'DH_LevelInfo'.static.DHDebugMode()) && Pawn != none)
+    if ((Level.NetMode == NM_Standalone || class'DH_LevelInfo'.static.DHDebugMode()) && ROPawn(Pawn) != none)
     {
-        ViewPos = Pawn.Location + Pawn.BaseEyeHeight * vect(0.0, 0.0, 1.0);
-        TargetPawn = Pawn(Trace(HitLocation, HitNormal, ViewPos + 1600.0 * vector(Rotation), ViewPos, true));
+        TargetPawn = ROPawn(ROPawn(Pawn).AutoTraceActor);
 
         // Only proceed if body's PRI matches the player (so must have been their old body, left using bKeepPRI option), or if body belongs to no one
         if (TargetPawn != none && (TargetPawn.PlayerReplicationInfo == PlayerReplicationInfo || TargetPawn.PlayerReplicationInfo == none))
@@ -3434,6 +3470,29 @@ exec function SetDrivePos(int NewX, int NewY, int NewZ, optional bool bScaleOneT
     }
 }
 
+// New debug exec to adjust a vehicle's DriveRot (vehicle occupant's rotation from attachment bone)
+exec function SetDriveRot(int NewPitch, int NewYaw, int NewRoll)
+{
+    local Vehicle V;
+    local rotator OldDriveRot;
+
+    if (Level.NetMode == NM_Standalone || class'DH_LevelInfo'.static.DHDebugMode())
+    {
+        V = Vehicle(Pawn);
+
+        if (V != none && V.Driver != none)
+        {
+            OldDriveRot = V.DriveRot;
+            V.DriveRot.Pitch = NewPitch;
+            V.DriveRot.Yaw = NewYaw;
+            V.DriveRot.Roll = NewRoll;
+            V.DetachDriver(V.Driver);
+            V.AttachDriver(V.Driver);
+            Log(V.VehicleNameString @ " new DriveRot =" @ V.DriveRot @ "(was" @ OldDriveRot $ ")");
+        }
+    }
+}
+
 // New debug exec to set a vehicle position's 1st person camera position offset
 exec function SetCamPos(int NewX, int NewY, int NewZ, optional bool bScaleOneTenth)
 {
@@ -3497,6 +3556,70 @@ exec function DriverCollisionDebug()
     if (DHHud(MyHud) != none)
     {
         DHHud(MyHud).DriverCollisionDebug();
+    }
+}
+
+// New debug exec to enable/disable penetration debugging functionality for all armored vehicles
+exec function DebugPenetration(bool bEnable)
+{
+    local class<DHArmoredVehicle> AVClass;
+    local class<DHVehicleCannon>  VCClass;
+    local DHArmoredVehicle        AV;
+    local DHVehicleCannon         VC;
+    local DHGameReplicationInfo   GRI;
+    local int                     i;
+
+    if (Level.NetMode == NM_Standalone || class'DH_LevelInfo'.static.DHDebugMode())
+    {
+        if (!bEnable)
+        {
+            ClearStayingDebugLines();
+        }
+
+        // Change debug settings for current vehicles
+        foreach DynamicActors(class'DHArmoredVehicle', AV)
+        {
+            AV.bDebugPenetration = bEnable;
+            AV.bLogDebugPenetration = bEnable;
+            AV.Class.default.bDebugPenetration = bEnable; // also change defaults so future spawned vehicles inherit the setting
+            AV.Class.default.bLogDebugPenetration = bEnable;
+        }
+
+        foreach DynamicActors(class'DHVehicleCannon', VC)
+        {
+            VC.bDebugPenetration = bEnable;
+            VC.bLogDebugPenetration = bEnable;
+            VC.Class.default.bDebugPenetration = bEnable;
+            VC.Class.default.bLogDebugPenetration = bEnable;
+        }
+
+        // Change default settings for all vehicles listed in the SpawnManager actor's vehicle pool list
+        GRI = DHGameReplicationInfo(GameReplicationInfo);
+
+        if (GRI != none)
+        {
+            for (i = 0; i < GRI.VEHICLE_POOLS_MAX; ++i)
+            {
+                AVClass = class<DHArmoredVehicle>(GRI.GetVehiclePoolVehicleClass(i));
+
+                if (AVClass != none)
+                {
+                    AVClass.default.bDebugPenetration = bEnable;
+                    AVClass.default.bLogDebugPenetration = bEnable;
+
+                    if (AVClass.default.PassengerWeapons.Length > 0 && class<DHVehicleCannonPawn>(AVClass.default.PassengerWeapons[0].WeaponPawnClass) != none)
+                    {
+                        VCClass = class<DHVehicleCannon>(AVClass.default.PassengerWeapons[0].WeaponPawnClass.default.GunClass);
+
+                        if (VCClass != none)
+                        {
+                            VCClass.default.bDebugPenetration = bEnable;
+                            VCClass.default.bLogDebugPenetration = bEnable;
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -3843,7 +3966,7 @@ exec function SetAngDamp(float NewValue)
 }
 
 // New debug exec to adjust location of engine smoke/fire position
-exec function SetDEOffset(int NewX, int NewY, int NewZ, optional bool bEngineFire)
+exec function SetDEOffset(int NewX, int NewY, int NewZ, optional bool bEngineFire, optional int NewScaleInOneTenths)
 {
     local DHVehicle V;
 
@@ -3886,6 +4009,12 @@ exec function SetDEOffset(int NewX, int NewY, int NewZ, optional bool bEngineFir
             }
         }
 
+        // Option to re-scale effect (won't accept float as input so have to enter say 9 & convert that to 0.9)
+        if (NewScaleInOneTenths > 0.0)
+        {
+            V.DamagedEffectScale = float(NewScaleInOneTenths) / 10.0;
+        }
+
         // Reposition any existing effect
         if (V.DamagedEffect != none)
         {
@@ -3893,6 +4022,56 @@ exec function SetDEOffset(int NewX, int NewY, int NewZ, optional bool bEngineFir
             V.DamagedEffect.SetLocation(V.Location + (V.DamagedEffectOffset >> V.Rotation));
             V.DamagedEffect.SetBase(V);
             V.DamagedEffect.SetEffectScale(V.DamagedEffectScale);
+        }
+    }
+}
+
+// New debug exec to show & adjust the height of vehicle's lower armour, i.e. the highest point (above the origin) where a hit counts as a lower hull hit
+// Spawns an angle plane attachment representing the setting (run again with no option specified to remove this)
+exec function SetLowerArmorHeight(optional string Option, optional float NewValue)
+{
+    local DHVehicle        V;
+    local DHArmoredVehicle AV;
+
+    if ((Level.NetMode == NM_Standalone || class'DH_LevelInfo'.static.DHDebugMode()) && GetVehicleBase(V))
+    {
+        AV = DHArmoredVehicle(V);
+
+        if (AV != none)
+        {
+            DestroyPlaneAttachments(AV); // remove any existing angle plane attachments
+
+            if (Option ~= "F" || Option ~= "Front")
+            {
+                Log(AV.VehicleNameString @ "LFrontArmorHeight =" @ NewValue @ "(was" @ AV.LFrontArmorHeight $ ")");
+                AV.LFrontArmorHeight = NewValue;
+                SpawnPlaneAttachment(AV, rot(0, 0, 16384), AV.LFrontArmorHeight * vect(0.0, 0.0, 1.0));
+            }
+            else if (Option ~= "R" || Option ~= "Right")
+            {
+                Log(AV.VehicleNameString @ "LRightArmorHeight =" @ NewValue @ "(was" @ AV.LRightArmorHeight $ ")");
+                AV.LRightArmorHeight = NewValue;
+                SpawnPlaneAttachment(AV, rot(0, 16384, 16384), AV.LRightArmorHeight * vect(0.0, 0.0, 1.0));
+            }
+            else if (Option ~= "B" || Option ~= "Back" || Option ~= "Rear")
+            {
+                Log(AV.VehicleNameString @ "LRearArmorHeight =" @ NewValue @ "(was" @ AV.LRearArmorHeight $ ")");
+                AV.LRearArmorHeight = NewValue;
+                SpawnPlaneAttachment(AV, rot(0, 32768, 16384), AV.LRearArmorHeight * vect(0.0, 0.0, 1.0));
+            }
+            else if (Option ~= "L" || Option ~= "Left")
+            {
+                Log(AV.VehicleNameString @ "LLeftArmorHeight =" @ NewValue @ "(was" @ AV.LLeftArmorHeight $ ")");
+                AV.LLeftArmorHeight = NewValue;
+                SpawnPlaneAttachment(AV, rot(0, -16384, 16384), AV.LLeftArmorHeight * vect(0.0, 0.0, 1.0));
+            }
+            else if (Option ~= "A" || Option ~= "All") // option to just display heights for all sides (no change)
+            {
+                SpawnPlaneAttachment(AV, rot(0, 0, 16384), AV.LFrontArmorHeight * vect(0.0, 0.0, 1.0));
+                SpawnPlaneAttachment(AV, rot(0, 16384, 16384), AV.LRightArmorHeight * vect(0.0, 0.0, 1.0));
+                SpawnPlaneAttachment(AV, rot(0, 32768, 16384), AV.LRearArmorHeight * vect(0.0, 0.0, 1.0));
+                SpawnPlaneAttachment(AV, rot(0, -16384, 16384), AV.LLeftArmorHeight * vect(0.0, 0.0, 1.0));
+            }
         }
     }
 }
@@ -3911,8 +4090,8 @@ exec function SetTreadHeight(float NewValue)
         if (NewValue != V.TreadHitMaxHeight)
         {
             V.TreadHitMaxHeight = NewValue;
-            SpawnPlaneAttachment(V, rot(0, 0, 16384), V.TreadHitMaxHeight * vect(0.0, 0.0, 1.0));
-            SpawnPlaneAttachment(V, rot(32768, 0, 16384), V.TreadHitMaxHeight * vect(0.0, 0.0, 1.0));
+            SpawnPlaneAttachment(V, rot(0, 16384, 16384), V.TreadHitMaxHeight * vect(0.0, 0.0, 1.0));
+            SpawnPlaneAttachment(V, rot(0, -16384, 16384), V.TreadHitMaxHeight * vect(0.0, 0.0, 1.0));
         }
     }
 }
@@ -4553,12 +4732,11 @@ function bool TeleportPlayer(vector SpawnLocation, rotator SpawnRotation)
 defaultproperties
 {
     // Sway values
-    SwayCurve=(Points=((InVal=0.0,OutVal=1.0),(InVal=3.0,OutVal=0.35),(InVal=12.0,OutVal=0.3),(InVal=45.0,OutVal=0.45),(InVal=10000000000.0,OutVal=0.55)))
-    BobCurve=(Points=((InVal=0.0,OutVal=0.8),(InVal=3.0,OutVal=0.2),(InVal=12.0,OutVal=0.15),(InVal=45.0,OutVal=0.2),(InVal=10000000000.0,OutVal=0.25)))
+    SwayCurve=(Points=((InVal=0.0,OutVal=1.0),(InVal=3.0,OutVal=0.375),(InVal=12.0,OutVal=0.33),(InVal=45.0,OutVal=0.475),(InVal=10000000000.0,OutVal=0.6)))
     DHSwayElasticFactor=8.0;
     DHSwayDampingFactor=0.51;
-    baseSwayYawAcc=600
-    baseSwayPitchAcc=500
+    BaseSwayYawAcc=600
+    BaseSwayPitchAcc=500
 
     // Max turn speed values
     DHStandardTurnSpeedFactor=32.0
@@ -4567,7 +4745,7 @@ defaultproperties
     DHScopeTurnSpeedFactor=0.2
 
     // Max flinch offset for close snaps
-    FlinchMaxOffset=350.0
+    FlinchMaxOffset=375.0
 
     // Flinch from bullet snaps when deployed
     FlinchRotMag=(X=100.0,Y=0.0,Z=100.0)

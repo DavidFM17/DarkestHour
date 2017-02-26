@@ -6,11 +6,10 @@
 class DH_RPG43GrenadeProjectile extends DHCannonShellHEAT;
 // Obviously not a cannon shell but it is a HEAT explosive & by extending this we can make use of HEAT functionality & DH armour penetration calculations
 
-// The angle, in degrees, at which the grenade must hit a surface to explode on contact.
-var float               MaxImpactAOIToExplode;
-var float               MinImpactSpeedToExplode;
-
-var class<WeaponPickup> PickupClass;
+var     float           MinImpactSpeedToExplode;   // minimum impact speed at which grenade must hit a surface to explode on contact
+var     float           MaxImpactAOIToExplode;     // maximum angle, in degrees, at which grenade must hit a surface to explode on contact
+var     float           MaxVerticalAOIForTopArmor; // max impact angle from vertical (in degrees, relative to vehicle) that registers as a hit on relatively thin top armor
+var class<WeaponPickup> PickupClass;               // pickup class if grenade is thrown but does not explode & lies on ground
 
 // Functions entered out as not relevant to grenade
 simulated static function int GetPitchForRange(int Range) { return 0; }
@@ -41,6 +40,21 @@ simulated function PostBeginPlay()
     }
 
     Acceleration = 0.5 * PhysicsVolume.Gravity;
+}
+
+
+// Modified to skip over Super in DHAntiVehicleProjectile, so we simply destroy the actor
+// This is a net temporary, torn off projectile, so it doesn't need the delayed destruction stuff used by a fully replicated cannon shell
+simulated function HandleDestruction()
+{
+    Destroy();
+}
+
+// Modified to skip over Super in DHCannonShell, to avoid playing explosion effects when projectile is destroyed
+// This is a net temporary, torn off projectile, so net client always handles its own destruction & so will always play explosion effects elsewhere if it needs to
+simulated function Destroyed()
+{
+    super(DHProjectile).Destroyed();
 }
 
 // From DHThrowableExplosiveProjectile (collision mesh block checks bWontStopThrownProjectile instead of bWontStopShell)
@@ -81,7 +95,7 @@ simulated singular function Touch(Actor Other)
     }
 
     // Now call ProcessTouch(), which is the where the class-specific Touch functionality gets handled
-    // Record LastTouched to prevent possible recursive calls & then clear it after
+    // Record LastTouched to make sure that if HurtRadius() gets called to give blast damage, it will always 'find' the hit actor
     LastTouched = Other;
     ProcessTouch(Other, HitLocation);
     LastTouched = none;
@@ -104,8 +118,8 @@ simulated function ProcessTouch(Actor Other, vector HitLocation)
     HitWall(HitNormal, Other);
 }
 
-// From DHThrowableExplosiveProjectile
-// Modified to adjust rotation on ground to compensate for static mesh being modelled facing forwards instead of up (required due to nature of this grenade's flight)
+// From DHThrowableExplosiveProjectile, modified so when projectile lands without having detonated it becomes a pickup
+// Also to adjust rotation on ground to compensate for static mesh being modelled facing forwards instead of up (required due to nature of this grenade's flight)
 // Also to remove 'Fear' stuff, as grenade does not explode after landing (if fails to detonate on impact)
 // Makes use of inherited NumDeflections variable as replacement for grenade's Bounces (works in reverse, counting up to 5 instead of down from 5)
 simulated function Landed(vector HitNormal)
@@ -115,23 +129,24 @@ simulated function Landed(vector HitNormal)
 
     if (NumDeflections > 5)
     {
-        bOrientToVelocity = false; // disable this after grenade lands as it will have no velocity & we want to preserve its rotation on the ground
-        SetPhysics(PHYS_None);
-        NewRotation = QuatToRotator(QuatProduct(QuatFromRotator(rotator(HitNormal)), QuatFromAxisAndAngle(HitNormal, class'UUnits'.static.UnrealToRadians(Rotation.Yaw))));
-        NewRotation.Pitch -= 16384; // somewhat hacky fix for static mesh rotation
-        SetRotation(NewRotation);
-
         if (Role == ROLE_Authority)
         {
+            bOrientToVelocity = false; // disable this after grenade lands as it will have no velocity & we want to preserve its rotation on the ground
+            SetPhysics(PHYS_None);
+            NewRotation = QuatToRotator(QuatProduct(QuatFromRotator(rotator(HitNormal)), QuatFromAxisAndAngle(HitNormal, class'UUnits'.static.UnrealToRadians(Rotation.Yaw))));
+            NewRotation.Pitch -= 16384; // somewhat hacky fix for static mesh rotation
+            SetRotation(NewRotation);
+
             P = Spawn(default.PickupClass,,, Location + vect(0.0, 0.0, 2.0), Rotation);
 
             if (P != none)
             {
-                Destroy();
                 P.InitDroppedPickupFor(none);
                 P.AmmoAmount[0] = 1;
             }
         }
+
+        Destroy();
     }
     else
     {
@@ -145,7 +160,7 @@ simulated function HitWall(vector HitNormal, Actor Wall)
 {
     local RODestroyableStaticMesh DestroMesh;
     local Actor  TraceHitActor;
-    local vector Direction, TempHitLocation, TempHitNormal;
+    local vector Direction, TempHitLocation, TempHitNormal, VehicleRelativeVertical, X, Y;
     local int    ImpactSpeed, xH, TempMaxWall, i;
     local bool   bExplodeOnImpact;
     local float  ImpactAOI;  // Angle of incidence, in degrees
@@ -197,35 +212,46 @@ simulated function HitWall(vector HitNormal, Actor Wall)
 
     bOrientToVelocity = false; // disable this after we hit something as the stabilising 'mini chute' will no longer have any effect
 
-    ImpactSpeed = VSize(Velocity);
-    ImpactAOI = Abs(class'UUnits'.static.RadiansToDegrees(Acos(HitNormal dot Normal(Velocity))) - 180.0);
-
-    // Grenade hit a vehicle & will explode if impact speed is high enough and
-    // it has a low angle of incidence (this prevents "glancing" hits from
-    // detonating the grenade
-    // TODO: maybe use CheckWall() to get hit surface Hardness & use that to
-    // calc req'd ImpactSpeed?
-    if (ImpactSpeed >= default.MinImpactSpeedToExplode && ImpactAOI <= default.MaxImpactAOIToExplode)
+    // Check whether grenade explodes on impact or bounces off, depending on what it hit, how fast & at what angle
+    // Made it so it grenade never explodes if it hits a player & always bounces off (discourages throwing at other players)
+    if (ROPawn(Wall) == none)
     {
-        if (ROVehicle(Wall) != none || ROVehicleWeapon(Wall) != none)
+        ImpactSpeed = VSize(Velocity);
+        ImpactAOI = Abs(class'UUnits'.static.RadiansToDegrees(Acos(HitNormal dot Normal(Velocity))) - 180.0);
+
+        // Grenade will explode if impact speed is high enough & it angle of incidence is low enough (that prevents glancing hits from detonating it)
+        // TODO: maybe use CheckWall() to get hit surface Hardness & use that to calculate required ImpactSpeed?
+        if (ImpactSpeed >= default.MinImpactSpeedToExplode && ImpactAOI <= default.MaxImpactAOIToExplode)
         {
-            // We hit an armored vehicle but failed to penetrate
-            if ((Wall.IsA('DHArmoredVehicle') && !DHArmoredVehicle(Wall).ShouldPenetrate(self, Location, Normal(Velocity), GetPenetration(LaunchLocation - Location)))
-                || (Wall.IsA('DHVehicleCannon') && !DHVehicleCannon(Wall).ShouldPenetrate(self, Location, Normal(Velocity), GetPenetration(LaunchLocation - Location))))
+            // We hit an armored vehicle
+            // 1st check whether it's a downwards hit, which probably means grenade dropped onto relatively thin top surface armour (a common tactic)
+            // If so we'll assume HEAT grenade's substantial penetration will defeat top armour of any vehicle's hull or turret, so skip penetration check
+            // Top hits or armor are not modelled in this game, but it's a reasonable assumption as even heavy tanks only had 30-40mm top armor
+            // Otherwise do normal armour penetration check & exit if it fails to penetrate (with suitable effects)
+            if (DHArmoredVehicle(Wall) != none || DHVehicleCannon(Wall) != none)
             {
-                FailToPenetrateArmor(Location, HitNormal, Wall);
+                // Re-calc AOI, this time relative to a line 'straight up' from the vehicle (relative to its rotation)
+                Wall.GetAxes(Wall.Rotation, X, Y, VehicleRelativeVertical);
+                ImpactAOI = class'UUnits'.static.RadiansToDegrees(Acos(-Normal(Velocity) dot VehicleRelativeVertical));
 
-                return;
+                if (ImpactAOI > default.MaxVerticalAOIForTopArmor &&
+                    ((Wall.IsA('DHArmoredVehicle') && !DHArmoredVehicle(Wall).ShouldPenetrate(self, Location, Normal(Velocity), GetPenetration(LaunchLocation - Location)))
+                    || (Wall.IsA('DHVehicleCannon') && !DHVehicleCannon(Wall).ShouldPenetrate(self, Location, Normal(Velocity), GetPenetration(LaunchLocation - Location)))))
+                {
+                    FailToPenetrateArmor(Location, HitNormal, Wall);
+
+                    return;
+                }
             }
-        }
 
-        bExplodeOnImpact = true;
+            bExplodeOnImpact = true;
+        }
     }
 
     // Deflect without exploding if grenade failed to detonate
     if (!bExplodeOnImpact)
     {
-        DHDeflect(Location, HitNormal, Wall);
+        Deflect(Location, HitNormal, Wall);
 
         return;
     }
@@ -270,8 +296,6 @@ simulated function HitWall(vector HitNormal, Actor Wall)
         }
     }
 
-    // Explode (unset bDidExplosionFX so Destroyed() knows grenade hasn't just disappeared after LifeSpan after failing to detonate on impact)
-    bDidExplosionFX = false;
     Explode(Location + ExploWallOut * HitNormal, HitNormal);
 
     bInHitWall = true; // set flag to prevent recursive calls
@@ -326,9 +350,9 @@ simulated function HitWall(vector HitNormal, Actor Wall)
     HandleDestruction();
 }
 
-// Modified version of function to include passed HitLocation, to give correct placement of deflection effect (shell's Location has moved on by the time the effect spawns)
-// Also avoided setting replicated variables on a server, as clients are going to get this anyway
-simulated function DHDeflect(vector HitLocation, vector HitNormal, Actor Wall)
+// Modified to use grenade bounce functionality from DHThrowableExplosiveProjectile
+// In that class it's at the end of HitWall(), but here conveniently moved into Deflect() function of our DHAntiVehicleProjectile parent class
+simulated function Deflect(vector HitLocation, vector HitNormal, Actor Wall)
 {
     local ESurfaceTypes ST;
     local vector        VNorm;
@@ -463,7 +487,6 @@ defaultproperties
     Speed=900.0
     bOrientToVelocity=true // so grenade doesn't spin & faces the way it's travelling, as was stablised by trailing crude 'minute chute'
     LifeSpan=15.0          // used in case the grenade fails to detonate on impact (will lie around for a bit for effect, then disappear)
-    bDidExplosionFX=true   // so by default we'll skip explosion effects, but if grenade actually explodes on impact we'll switch this to false to get effects
     bExplodesOnHittingWater=false
     bHasTracer=false
 
@@ -539,6 +562,7 @@ defaultproperties
     // Override unwanted properties inherited from cannon shell parent classes
     bTrueBallistics=false
     bUpdateSimulatedPosition=false
+    bNetTemporary=true // doesn't use replicated FuzeLengthTimer to make it explode, like other grenades (& short range weapon without ongoing movement replication like cannon shell)
     TransientSoundRadius=300.0
     TransientSoundVolume=0.3
     ExplosionSoundVolume=3.0 // seems high but TransientSoundVolume is only 0.3, compared to 1.0 for a shell
@@ -552,5 +576,6 @@ defaultproperties
     // RPG-43 specific variables
     MaxImpactAOIToExplode=35.0
     MinImpactSpeedToExplode=900.0
+    MaxVerticalAOIForTopArmor=25.0
     PickupClass=class'DH_Weapons.DH_RPG43GrenadePickup'
 }

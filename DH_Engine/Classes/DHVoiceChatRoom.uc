@@ -58,3 +58,4 @@ defaultproperties
 {
     SquadIndex=-1
 }
+

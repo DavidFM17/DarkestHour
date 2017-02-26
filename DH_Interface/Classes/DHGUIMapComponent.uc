@@ -87,8 +87,6 @@ function SelectSpawnPoint(int SpawnPointIndex)
 {
     local int i;
 
-    Log("SelectSpawnPoint(" $ SpawnPointIndex $ ")");
-
     for (i = 0; i < arraycount(b_SpawnPoints); ++i)
     {
         if (i == SpawnPointIndex)

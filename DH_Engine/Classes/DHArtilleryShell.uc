@@ -21,7 +21,7 @@ var     class<Emitter>      ShellHitSnowEffectClass;    // artillery hitting sno
 var     class<Emitter>      ShellHitDirtEffectLowClass; // artillery hitting dirt emitter low settings
 var     class<Emitter>      ShellHitSnowEffectLowClass; // artillery hitting snow emitter low settings
 
-// Camera shake & blue
+// Camera shake & blur
 var     vector              ShakeRotMag;                // how far to rot view
 var     vector              ShakeRotRate;               // how fast to rot view
 var     float               ShakeRotTime;               // how much time to rotate the player's view
@@ -185,7 +185,7 @@ simulated singular function Touch(Actor Other)
     }
 
     // Now call ProcessTouch(), which is the where the class-specific Touch functionality gets handled
-    // Record LastTouched to prevent possible recursive calls & then clear it after
+    // Record LastTouched to make sure that if HurtRadius() gets called to give blast damage, it will always 'find' the hit actor
     LastTouched = Other;
     ProcessTouch(Other, HitLocation);
     LastTouched = none;
@@ -298,7 +298,7 @@ simulated function SpawnExplosionEffects(vector HitLocation, vector HitNormal)
     // Move karma ragdolls around when this explodes
     Start = Location + vect(0.0, 0.0, 32.0);
 
-    foreach VisibleCollidingActors(class 'ROPawn', Victims, DamageRadius, Start)
+    foreach VisibleCollidingActors(class'ROPawn', Victims, DamageRadius, Start)
     {
         if (Victims != self && Victims.Physics == PHYS_KarmaRagDoll)
         {
@@ -364,7 +364,7 @@ function HurtRadius(float DamageAmount, float DamageRadius, class<DamageType> Da
         }
 
         // Now we need to check whether there's something in the way that could shield this actor from the blast
-        // Usually we trace to actor's location, but for a tank (or similar, including AT gun), we adjust Z location to give a more consistent, realistic tracing height
+        // Usually we trace to actor's location, but for a vehicle with a cannon we adjust Z location to give a more consistent, realistic tracing height
         // This is because many vehicles are modelled with their origin on the ground, so even a slight bump in the ground could block all blast damage!
         VictimLocation = Victim.Location;
         V = DHVehicle(Victim);
@@ -633,7 +633,7 @@ defaultproperties
 
     Speed=8000.0
     MaxSpeed=8000.0
-    LifeSpan=1500.0 // TODO: seems way too long, a few seconds would be fine, same as other projectiles
+    LifeSpan=12.0    // was 1500 seconds but way too long & no reason for that
 //  bProjTarget=true // was in RO but removed as makes no sense for a shell be a target for other projectiles & no other projectiles have this
 
     DistantSound=sound'Artillery.fire_distant'

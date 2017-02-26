@@ -50,8 +50,7 @@ var     bool        bOpticsDamaged;
 var     texture     DestroyedGunsightOverlay;
 
 // Debug
-var     bool        bDebugSights;        // shows centering cross in gunsight for testing purposes
-var     bool        bDebuggingText;      // on screen messages if damage prevents turret or gun from moving properly
+var     bool        bDebugSights; // shows centering cross in gunsight for testing purposes
 
 replication
 {
@@ -337,60 +336,40 @@ simulated function POVChanged(PlayerController PC, bool bBehindViewChanged)
 //  ******************************* FIRING & AMMO  ********************************  //
 ///////////////////////////////////////////////////////////////////////////////////////
 
-// Modified to check player is in a valid firing position, to add clientside check that we are loaded (avoids wasted replicated function call to server),
-// to removed obsolete RO functionality from ROTankCannonPawn & optimise what remains
-// Also for net client to pass any changed pending ammo type to server (optimises network as avoids update to server each time player toggles ammo, doing it only when needed)
+// Modified so net client passes any changed pending ammo type to server (optimises network as avoids server update each time player toggles ammo, doing it only when needed)
+// Also so fire button triggers a manual cannon reload if players uses the manual reloading option & the cannon is waiting to start reloading
 function Fire(optional float F)
 {
-    local DHPlayer PC;
-
-    PC = DHPlayer(Controller);
-
-    if (PC != none && PC.IsWeaponLocked())
+    if (!CanFire() || ArePlayersWeaponsLocked() || VehWep == none)
     {
-        PC.ReceiveLocalizedMessage(class'DHWeaponsLockedMessage', 1,,, PC);
-
         return;
     }
 
-    if (CanFire() && VehWep != none)
+    if (VehWep.ReadyToFire(false))
     {
-        if (VehWep.ReadyToFire(false))
+        if (Role < ROLE_Authority && !VehWep.PlayerUsesManualReloading() && DHVehicleCannon(VehWep) != none) // no update if manual reloading (update on manual reload instead)
         {
-            if (Role < ROLE_Authority && !VehWep.PlayerUsesManualReloading() && DHVehicleCannon(VehWep) != none) // no update if player uses manual reloading (update on manual reload instead)
-            {
-                DHVehicleCannon(VehWep).CheckUpdatePendingAmmo();
-            }
-
-            super(Vehicle).Fire(F);
-
-            if (IsHumanControlled())
-            {
-                VehWep.ClientStartFire(Controller, false);
-            }
+            DHVehicleCannon(VehWep).CheckUpdatePendingAmmo();
         }
-        else
+
+        super(Vehicle).Fire(F);
+
+        if (IsHumanControlled())
         {
-            ROManualReload(); // only actually tries a manual reload if player uses that option (just that ROML function contains exactly the same checks we'd otherwise duplicate here)
+            VehWep.ClientStartFire(Controller, false);
         }
+    }
+    else
+    {
+        ROManualReload(); // only actually tries a manual reload if player uses that option (ROML function contains exactly the same checks we'd otherwise duplicate here)
     }
 }
 
-// Modified (from deprecated ROTankCannonPawn) to check CanFire(), to skip over obsolete RO functionality, & to add dry-fire sound if trying to fire empty MG
+// Implemented to handle coaxial MG fire, including dry-fire sound if trying to fire it when empty (but not if actively reloading)
+// Checks that player is in a valid firing position & his weapons aren't locked due to spawn killing
 function AltFire(optional float F)
 {
-    local DHPlayer PC;
-
-    PC = DHPlayer(Controller);
-
-    if (PC != none && PC.IsWeaponLocked())
-    {
-        PC.ReceiveLocalizedMessage(class'DHWeaponsLockedMessage', 1,,, PC);
-
-        return;
-    }
-
-    if (!bHasAltFire || !CanFire() || VehWep == none)
+    if (!bHasAltFire || !CanFire() || ArePlayersWeaponsLocked() || VehWep == none)
     {
         return;
     }
@@ -417,7 +396,7 @@ function bool CanFire()
 {
     return (DriverPositionIndex != PeriscopePositionIndex && DriverPositionIndex != BinocPositionIndex
         && !(IsInState('ViewTransition') && (LastPositionIndex == PeriscopePositionIndex || LastPositionIndex == BinocPositionIndex)))
-        || ROPlayer(Controller) == none;
+        || !IsHumanControlled();
 }
 
 // Modified (from deprecated ROTankCannonPawn) to keep ammo changes clientside as a network optimisation (only pass to server when it needs the change, not every key press)
@@ -644,6 +623,21 @@ static function StaticPrecache(LevelInfo L)
         L.AddPrecacheMaterial(default.CannonScopeCenter);
     }
 
+    if (default.RangeRingRotator != none)
+    {
+        L.AddPrecacheMaterial(default.RangeRingRotator);
+    }
+
+    if (default.DestroyedGunsightOverlay != none)
+    {
+        L.AddPrecacheMaterial(default.DestroyedGunsightOverlay);
+    }
+
+    if (default.PeriscopeOverlay != none)
+    {
+        L.AddPrecacheMaterial(default.PeriscopeOverlay);
+    }
+
     if (default.AmmoShellTexture != none)
     {
         L.AddPrecacheMaterial(default.AmmoShellTexture);
@@ -666,6 +660,9 @@ simulated function UpdatePrecacheMaterials()
     super.UpdatePrecacheMaterials();
 
     Level.AddPrecacheMaterial(CannonScopeCenter);
+    Level.AddPrecacheMaterial(RangeRingRotator);
+    Level.AddPrecacheMaterial(DestroyedGunsightOverlay);
+    Level.AddPrecacheMaterial(PeriscopeOverlay);
     Level.AddPrecacheMaterial(AmmoShellTexture);
     Level.AddPrecacheMaterial(AmmoShellReloadTexture);
     Level.AddPrecacheMaterial(AltAmmoReloadTexture);
@@ -743,26 +740,6 @@ function HandleTurretRotation(float DeltaTime, float YawChange, float PitchChang
             PitchChange = 0.0;
         }
 
-        // Debug
-        if (bDebuggingText && Role == ROLE_Authority)
-        {
-            if (bTurretRingDamaged)
-            {
-                if (bGunPivotDamaged)
-                {
-                    Level.Game.Broadcast(self, "Turret traverse & gun pivot disabled");
-                }
-                else
-                {
-                    Level.Game.Broadcast(self, "Turret traverse disabled");
-                }
-            }
-            else if (bGunPivotDamaged)
-            {
-                Level.Game.Broadcast(self, "Gun pivot disabled");
-            }
-        }
-
         UpdateTurretRotation(DeltaTime, YawChange, PitchChange);
 
         if (IsHumanControlled())
@@ -780,7 +757,7 @@ function UpdateRocketAcceleration(float DeltaTime, float YawChange, float PitchC
 
     if ((DriverPositionIndex == PeriscopePositionIndex || DriverPositionIndex == BinocPositionIndex) && DHPlayer(Controller) != none)
     {
-        TurnSpeedFactor = DHPlayer(Controller).DHISTurnSpeedFactor;
+        TurnSpeedFactor = DHPlayer(Controller).DHScopeTurnSpeedFactor;
         YawChange *= TurnSpeedFactor;
         PitchChange *= TurnSpeedFactor;
     }

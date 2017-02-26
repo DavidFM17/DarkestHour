@@ -75,8 +75,8 @@ var     byte                BarrelIndex;            // index number of current b
 var     name                BarrelChangeAnim;       // anim for bipod barrel changing while deployed
 var     bool                bCallBarrelChangeTimer; // we're in middle of a barrel change, so Timer() should call PerformBarrelChange() instead of exiting state ChangingBarrels
 var     float               BarrelChangeDuration;   // saves duration of barrel change, so Timer() can be called at mid point & then again at end of barrel change animation
-var     class<DHMGSteam>    BarrelSteamEmitterClass;
-var     DHMGSteam           BarrelSteamEmitter;
+var     class<ROMGSteam>    BarrelSteamEmitterClass;
+var     ROMGSteam           BarrelSteamEmitter;
 var     name                BarrelSteamBone;        // bone we attach the barrel steam emitter to
 var     bool                bBarrelSteamActive;     // barrel is steaming
 var     bool                bBarrelDamaged;         // barrel is close to failure, accuracy is VERY BAD
@@ -1388,7 +1388,11 @@ function ServerRequestReload()
     if (AllowReload())
     {
         GotoState('Reloading');
-        ClientDoReload();
+
+        if (!InstigatorIsLocallyControlled()) // a server makes an owning net client also go to state 'Reloading' (won't happen in SP or owning listen server)
+        {
+            ClientDoReload();
+        }
     }
     else
     {
@@ -1949,6 +1953,8 @@ function DropFrom(vector StartLocation)
 }
 
 // Modified to play the dry-fire sound if you're out of ammo
+// Note that firing cannot be stopped in this function; it can only be used to do extra things, like effects
+// If the pawn calls Fire() on its Weapon, it appears that ClientStartFire() gets triggered by native code, which is where weapon actually commences firing process
 simulated function Fire(float F)
 {
     if (AmmoAmount(0) < 1 && !IsBusy() && FireMode[0].NoAmmoSound != none)
@@ -2031,6 +2037,7 @@ simulated state ChangingBarrels extends WeaponBusy
         // This replaces what would be PlayAnimAndSetTimer(), so on an authority role we set up to call a Timer to swap barrels halfway through the barrel change animation
         // This is so any current steam effect stops when the old barrel has been removed & put away, then we determine whether the new barrel should be steaming
         // This is rather hacky & should really be controlled by a notify event in the barrel change animation, but I can't justify re-making RO's MG34 & MG42 anim files just for that
+        // TODO: looks like RO's MG34 & MG42 anim files were later re-made as DH versions so if they are retained the anim notifies can be added instead of this hacky functionality
         if (HasAnim(BarrelChangeAnim))
         {
             if (InstigatorIsLocallyControlled())
@@ -2140,8 +2147,8 @@ simulated function SetBarrelSteamActive(bool bSteaming)
         }
     }
 
-    // Call a replicated server-to-client function to do the same on the owning net client
-    if (Level.NetMode == NM_DedicatedServer || Level.NetMode == NM_ListenServer)
+    // Server calls a replicated server-to-client function to do the same on the owning net client
+    if ((Level.NetMode == NM_DedicatedServer || Level.NetMode == NM_ListenServer) && !InstigatorIsLocallyControlled())
     {
         ClientSetBarrelSteam(bBarrelSteamActive);
     }

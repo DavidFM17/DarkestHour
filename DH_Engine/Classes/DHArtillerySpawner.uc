@@ -17,20 +17,18 @@ var     int     SalvoAmount;  // no. of salvoes in this strike
 var     int     SpreadAmount; // randomised spread of each shell (in UU)
 
 // From deprecated ROArtillerySpawner, optimised a little
+// And setting a LifeSpan for this actor, as a fail-safe in case the sequence of timers somehow gets interrupted & we don't ever get to end of arty strike
 function PostBeginPlay()
 {
     local ROLevelInfo LI;
-    local float       StrikeDelay;
+    local float       StrikeDelay, MaxSalvoDuration;
 
-    if (Controller(Owner) != none && ROTeamGame(Level.Game) != none && ROTeamGame(Level.Game).LevelInfo != none)
+    if (Controller(Owner) != none && ROTeamGame(Level.Game) != none && ROTeamGame(Level.Game).LevelInfo != none && ROGameReplicationInfo(Level.Game.GameReplicationInfo) != none)
     {
+        // Record the team that called this arty strike
+        // Also save strike position to GRI so team players see it on their map (note this also prevents team calling another strike until this one is over)
         OwningTeam = Controller(Owner).GetTeamNum();
-
-        // Save artillery strike position to GRI so team players see it on their map
-        if (ROGameReplicationInfo(Level.Game.GameReplicationInfo) == none)
-        {
-            ROGameReplicationInfo(Level.Game.GameReplicationInfo).ArtyStrikeLocation[OwningTeam] = Location;
-        }
+        ROGameReplicationInfo(Level.Game.GameReplicationInfo).ArtyStrikeLocation[OwningTeam] = Location;
 
         // Get arty strike properties from our team's settings in the map's DHLevelInfo
         LI = ROTeamGame(Level.Game).LevelInfo;
@@ -40,7 +38,14 @@ function PostBeginPlay()
         StrikeDelay = float(LI.GetStrikeDelay(OwningTeam)) * (0.85 + (FRand() * 0.3));  // +/- 15% randomisation on delay
 
         // Set timer until arty strike begins
-        SetTimer(StrikeDelay, false);
+        SetTimer(FMin(StrikeDelay, 1.0), false); // added a minimum to avoid any possibility of setting a null timer
+
+        // Set LifeSpan until this actor destroys itself
+        // Added as a fail-safe in case the sequence of timers somehow gets interrupted & we don't ever get to end of arty strike
+        // If that happened this actor wouldn't destroy itself & arty strike would remain 'live', stopping the team from calling any more arty
+        // This actor's LifeSpan is set to the maximum possible length of the strike, assuming the max random time between shells & salvoes
+        MaxSalvoDuration = float(BatterySize - 1) * 1.5;
+        LifeSpan = StrikeDelay + (float(SalvoAmount - 1) * 20.0) + (float(SalvoAmount) * MaxSalvoDuration) + 1.0;
     }
     else
     {
@@ -55,6 +60,10 @@ function Destroyed()
     if (ROGameReplicationInfo(Level.Game.GameReplicationInfo) != none)
     {
         ROGameReplicationInfo(Level.Game.GameReplicationInfo).ArtyStrikeLocation[OwningTeam] = vect(0.0, 0.0, 0.0);
+    }
+    else
+    {
+        Log("DHArtillerySpawner ERROR: actor destroyed but no GRI so can't clear the ArtyStrikeLocation to end the strike!");
     }
 
     LastSpawnedShell = none;
@@ -115,8 +124,8 @@ function Timer()
         RandomSpread.X += Rand((2 * SpreadAmount) + 1) - SpreadAmount; // gives +/- zero to SpreadAmount
         RandomSpread.Y += Rand((2 * SpreadAmount) + 1) - SpreadAmount;
 
-        // Altered to spawn shell a standard approx 20m above strike location & to use a different method of setting shell's InstigatorController
-        LastSpawnedShell = Spawn(class'DHArtilleryShell',,, Location + vect(0.0, 0.0, 1200.0) + RandomSpread, rotator(PhysicsVolume.Gravity));
+        // Altered to spawn shell a standard approx 50m above strike location & to use a different method of setting shell's InstigatorController
+        LastSpawnedShell = Spawn(class'DHArtilleryShell',,, Location + vect(0.0, 0.0, 3000.0) + RandomSpread, rotator(PhysicsVolume.Gravity));
 
         if (LastSpawnedShell != none)
         {
@@ -127,7 +136,7 @@ function Timer()
         // If this salvo still has remaining shells to land, set a new, fairly short timer to spawn the next shell & exit
         if (ShellCounter < BatterySize)
         {
-            SetTimer(FRand() * 1.5, false); // randomised 0 to 1.5 seconds between shells
+            SetTimer(0.05 + (FRand() * 1.45), false); // randomised 0.05 to 1.5 seconds between shells (0.05 minimum to avoid any possibility of setting a null timer)
 
             return;
         }
@@ -142,7 +151,7 @@ function Timer()
     if (SalvoCounter < SalvoAmount)
     {
         ShellCounter = 0; // reset shell counter for next salvo
-        SetTimer(10.0 + (10.0 * FRand()), false); // randomised 10 to 20 seconds between salvoes
+        SetTimer(10.0 + (FRand() * 10.0), false); // randomised 10 to 20 seconds between salvoes
     }
     // Otherwise destroy this actor as the arty strike has finished
     else

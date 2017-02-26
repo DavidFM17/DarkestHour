@@ -22,16 +22,6 @@ var     bool                bIsMortarObserver;      // role has functionality of
 
 var()   int                 AddedReinforcementTime; // optional extra time in seconds before re-spawning
 
-function PostBeginPlay()
-{
-    if (DarkestHourGame(Level.Game) != none)
-    {
-        DarkestHourGame(Level.Game).AddRole(self);
-    }
-
-    HandlePrecache();
-}
-
 // Modified to include GivenItems array, & to just call StaticPrecache on the DHWeapon item (which now handles all related pre-caching)
 // Also to avoid pre-cache stuff on a server & avoid accessed none errors
 simulated function HandlePrecache()
@@ -198,8 +188,6 @@ simulated function bool IsValidCharacterName(string InCharacterName)
     // If role has no defined Models (e.g. using new DH system) return true if a null CharacterName has been passed
     if (default.Models.Length == 0)
     {
-        if (InCharacterName != "") log(name @ "IsValidCharacterName: no Models array so returning FALSE for passed CharacterName" @ InCharacterName @ "!!!"); // TEMPDEBUG (Matt)
-
         return InCharacterName == "";
     }
 
@@ -211,8 +199,6 @@ simulated function bool IsValidCharacterName(string InCharacterName)
             return true;
         }
     }
-
-    log(name @ "IsValidCharacterName: returning FALSE for passed CharacterName" @ InCharacterName @ "which is not in the Models array !!!"); // TEMPDEBUG (Matt)
 
     return false;
 }

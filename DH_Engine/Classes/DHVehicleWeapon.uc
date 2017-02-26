@@ -60,6 +60,9 @@ var     name                        FireAttachBone;
 var     vector                      FireEffectOffset;
 var     float                       FireEffectScale;
 
+// Artillery
+var     bool                        bIsArtillery;   // TODO: put this in vehicle itself?
+
 replication
 {
     // Variables the server will replicate to the client that owns this actor
@@ -468,8 +471,8 @@ function CeaseFire(Controller C, bool bWasAltFire)
 // If Fire() or AltFire() are called in the meantime, we exit this state early & resume firing (in that situation there's no need to reset FlashCount)
 // The 0.1 second delay is arbitrary, but should give sufficient time, while not being a noticeable delay
 // Note that the delay in the original system was essentially random & caused by its network inefficiency
-// The server called ClientCeaseFire() on owning client, which in return called VehicleCeaseFire() on the server - both know they need to cease fire, so that was unnecessary
-// But it did create delay - however, timing was from 2-way replication between server & owning client, which is random to other clients & no better than an arbitrary time delay, maybe worse
+// The server called ClientCeaseFire() on owning client, which in return called VehicleCeaseFire() on server - both know they need to cease fire so was unnecessary
+// It did create delay but timing was from 2-way replication between server & owning client, which is random to other clients & no better than arbitrary time delay, maybe worse
 state ServerCeaseFire extends ProjectileFireMode
 {
     function Fire(Controller C)
@@ -772,6 +775,11 @@ static function StaticPrecache(LevelInfo L)
     {
         L.AddPrecacheMaterial(default.HighDetailOverlay);
     }
+
+    if (default.CollisionStaticMesh != none)
+    {
+        L.AddPrecacheStaticMesh(default.CollisionStaticMesh);
+    }
 }
 
 // Modified to add extra material properties (note the Super in Actor already pre-caches the Skins array)
@@ -790,7 +798,7 @@ simulated function UpdatePrecacheMaterials()
     }
 }
 
-// Modified to add projectile classes
+// Modified to add projectile classes & collision mesh
 simulated function UpdatePrecacheStaticMeshes()
 {
     super.UpdatePrecacheStaticMeshes();
@@ -803,6 +811,11 @@ simulated function UpdatePrecacheStaticMeshes()
     if (SecondaryProjectileClass != none)
     {
         Level.AddPrecacheStaticMesh(SecondaryProjectileClass.default.StaticMesh);
+    }
+
+    if (CollisionStaticMesh != none)
+    {
+        Level.AddPrecacheStaticMesh(CollisionStaticMesh);
     }
 }
 

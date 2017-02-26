@@ -173,3 +173,4 @@ defaultproperties
     PublicChannelNames(18)="Squad"
     PublicChannelNames(19)="Squad"
 }
+

@@ -5,8 +5,7 @@
 
 class DHMapVotingPage extends MapVotingPage config(DHMapVotingInfo);
 
-var localized string                            lmsgMapQAFailed,
-                                                lmsgMapOutOfBounds;
+var localized string                            lmsgMapOutOfBounds;
 
 var(DHMapVotingInfo) config array<string>       MapVoteInfo;
 
@@ -82,14 +81,8 @@ function SendVote(GUIComponent Sender)
             // Do a check if the current player count is in bounds of recommended range or if level has failed QA
             if (Parts.Length >= 5) //Require all info
             {
-                Min = int(Parts[2]);
-                Max = int(Parts[3]);
-
-                if (Parts[4] ~= "Failed")
-                {
-                    PlayerOwner().ClientMessage(lmsgMapQAFailed);
-                    return;
-                }
+                Min = int(Parts[3]);
+                Max = int(Parts[4]);
 
                 if (GRI.PRIArray.Length < Min || (GRI.PRIArray.Length > Max && GRI.PRIArray.Length < GRI.MaxPlayers))
                 {
@@ -130,7 +123,6 @@ function SendVote(GUIComponent Sender)
 
 defaultproperties
 {
-    lmsgMapQAFailed="Please vote for a map that has not failed quality control. You can still vote for this map on the full list."
     lmsgMapOutOfBounds="Please vote for a map suitable for the current player count. You can still vote for this map on the full list."
 
     lmsgMode(0)="Majority Wins"
@@ -142,22 +134,20 @@ defaultproperties
         WinTop=0.371020
         bVisibleWhenEmpty=true
         StyleName="ServerBrowserGrid"
-        bScaleToParent=True
-        bBoundToParent=True
+        bScaleToParent=true
+        bBoundToParent=true
         FontScale=FNS_Small
-        HeaderColumnPerc(0)=0.2
-        HeaderColumnPerc(1)=0.15
-        HeaderColumnPerc(2)=0.15
-        HeaderColumnPerc(3)=0.15
-        HeaderColumnPerc(4)=0.2
-        HeaderColumnPerc(5)=0.15
+        HeaderColumnPerc(0)=0.25 // Map Name
+        HeaderColumnPerc(1)=0.2  // Source
+        HeaderColumnPerc(2)=0.15 // Country
+        HeaderColumnPerc(3)=0.15 // Type
+        HeaderColumnPerc(4)=0.25 // Player Range
     End Object
     lb_MapListBox=DHMapVoteMultiColumnListBox'DH_Interface.DHMapVotingPage.MapListBox'
     Begin Object class=DHMapVoteCountMultiColumnListBox Name=VoteCountListBox
-        HeaderColumnPerc(0)=0.3
-        HeaderColumnPerc(1)=0.2
-        HeaderColumnPerc(2)=0.2
-        HeaderColumnPerc(3)=0.3
+        HeaderColumnPerc(0)=0.4 // Nominated Maps
+        HeaderColumnPerc(1)=0.3 // Votes
+        HeaderColumnPerc(2)=0.3 // Player Range
         DefaultListClass="DH_Interface.DHMapVoteCountMultiColumnList"
         bVisibleWhenEmpty=true
         OnCreateComponent=VoteCountListBox.InternalOnCreateComponent

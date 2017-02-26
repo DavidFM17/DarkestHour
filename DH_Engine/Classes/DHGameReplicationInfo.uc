@@ -5,7 +5,7 @@
 
 class DHGameReplicationInfo extends ROGameReplicationInfo;
 
-struct MortarTarget
+struct ArtilleryTarget
 {
     var bool                    bIsActive;
     var DHPlayer                Controller;
@@ -50,12 +50,12 @@ var byte                DHAxisRoleCount[ROLES_MAX];
 
 const MORTAR_TARGETS_MAX = 2;
 
-// Colin: The maximum distance a mortar strike can be away from a marked target
-// for a hit indicator to show on the map
-var float MortarTargetDistanceThreshold;
+// The maximum distance an artillery strike can be away from a marked target for
+// a hit indicator to show on the map
+var float ArtilleryTargetDistanceThreshold;
 
-var MortarTarget        AlliedMortarTargets[MORTAR_TARGETS_MAX];
-var MortarTarget        GermanMortarTargets[MORTAR_TARGETS_MAX];
+var ArtilleryTarget        AlliedArtilleryTargets[MORTAR_TARGETS_MAX];
+var ArtilleryTarget        GermanArtilleryTargets[MORTAR_TARGETS_MAX];
 
 var int                 SpawnsRemaining[2];
 var float               AttritionRate[2];
@@ -109,8 +109,8 @@ replication
         DHAxisRoleBotCount,
         CarriedAlliedRadios,
         CarriedAxisRadios,
-        AlliedMortarTargets,
-        GermanMortarTargets,
+        AlliedArtilleryTargets,
+        GermanArtilleryTargets,
         VehiclePoolVehicleClasses,
         VehiclePoolIsActives,
         VehiclePoolNextAvailableTimes,
@@ -566,22 +566,22 @@ simulated function GetRoleCounts(RORoleInfo RI, out int Count, out int BotCount,
     }
 }
 
-function ClearAllMortarTargets()
+function ClearAllArtilleryTargets()
 {
     local int i;
 
-    for (i = 0; i < arraycount(GermanMortarTargets); ++i)
+    for (i = 0; i < arraycount(GermanArtilleryTargets); ++i)
     {
-        GermanMortarTargets[i].bIsActive = false;
+        GermanArtilleryTargets[i].bIsActive = false;
     }
 
-    for (i = 0; i < arraycount(AlliedMortarTargets); ++i)
+    for (i = 0; i < arraycount(AlliedArtilleryTargets); ++i)
     {
-        AlliedMortarTargets[i].bIsActive = false;
+        AlliedArtilleryTargets[i].bIsActive = false;
     }
 }
 
-function ClearMortarTarget(DHPlayer PC)
+function ClearArtilleryTarget(DHPlayer PC)
 {
     local int i;
 
@@ -590,20 +590,20 @@ function ClearMortarTarget(DHPlayer PC)
         return;
     }
 
-    for (i = 0; i < arraycount(GermanMortarTargets); ++i)
+    for (i = 0; i < arraycount(GermanArtilleryTargets); ++i)
     {
-        if (GermanMortarTargets[i].Controller == PC)
+        if (GermanArtilleryTargets[i].Controller == PC)
         {
-            GermanMortarTargets[i].bIsActive = false;
+            GermanArtilleryTargets[i].bIsActive = false;
             break;
         }
     }
 
-    for (i = 0; i < arraycount(AlliedMortarTargets); ++i)
+    for (i = 0; i < arraycount(AlliedArtilleryTargets); ++i)
     {
-        if (AlliedMortarTargets[i].Controller == PC)
+        if (AlliedArtilleryTargets[i].Controller == PC)
         {
-            AlliedMortarTargets[i].bIsActive = false;
+            AlliedArtilleryTargets[i].bIsActive = false;
             break;
         }
     }
@@ -695,6 +695,43 @@ function AddHelpRequest(PlayerReplicationInfo PRI, int ObjectiveID, int RequestT
     }
 }
 
+// Modified to fix incorrect RequestType used to identify resupply request (was 2, which is a defend objective request - should be 3)
+function RemoveMGResupplyRequestFor(PlayerReplicationInfo PRI)
+{
+    local int i;
+
+    if (PRI == none || PRI.Team == none)
+    {
+        return;
+    }
+
+    // Search request array to see if there's an MG resupply request for this player & clear it if there is
+    if (PRI.Team.TeamIndex == AXIS_TEAM_INDEX)
+    {
+        for (i = 0; i < arraycount(AxisHelpRequests); ++i)
+        {
+            if (AxisHelpRequests[i].OfficerPRI == PRI && AxisHelpRequests[i].RequestType == 2)
+            {
+                AxisHelpRequests[i].OfficerPRI = none;
+                AxisHelpRequests[i].RequestType = 255;
+                break;
+            }
+        }
+    }
+    else if (PRI.Team.TeamIndex == ALLIES_TEAM_INDEX)
+    {
+        for (i = 0; i < arraycount(AlliedHelpRequests); ++i)
+        {
+            if (AlliedHelpRequests[i].OfficerPRI == PRI && AlliedHelpRequests[i].RequestType == 2)
+            {
+                AlliedHelpRequests[i].OfficerPRI = none;
+                AlliedHelpRequests[i].RequestType = 255;
+                break;
+            }
+        }
+    }
+}
+
 simulated function string GetTeamScaleString(int Team)
 {
    local float     d;
@@ -726,7 +763,7 @@ defaultproperties
 {
     AlliesVictoryMusicIndex=-1
     AxisVictoryMusicIndex=-1
-    MortarTargetDistanceThreshold=15088 //250 meters in UU
+    ArtilleryTargetDistanceThreshold=15088 //250 meters in UU
     ForceScaleText="Size"
     ReinforcementsInfiniteText="Infinite"
     DeathPenaltyText="Death Penalty"

@@ -261,9 +261,27 @@ simulated function bool PointOfView()
 //  ******************************* FIRING & AMMO  ********************************  //
 ///////////////////////////////////////////////////////////////////////////////////////
 
+// Modified to check player is in a valid firing position & his weapons aren't locked due to spawn killing
+function Fire(optional float F)
+{
+    if (CanFire() && !ArePlayersWeaponsLocked())
+    {
+        super.Fire(F);
+    }
+}
+
 // Emptied out so we have no alt fire by default - implement functionality in subclass if has alt fire, e.g. cannon with coaxial MG
 function AltFire(optional float F)
 {
+}
+
+// Modified for server verification that player's weapons aren't locked due to spawn killing (belt & braces as similar clientside check stops it reaching this point anyway)
+function VehicleFire(bool bWasAltFire)
+{
+    if (!ArePlayersWeaponsLocked())
+    {
+        super.VehicleFire(bWasAltFire);
+    }
 }
 
 // New function to do what ClientVehicleCeaseFire() does, except skipping the replicated VehicleCeaseFire() function call to a server
@@ -271,7 +289,6 @@ function AltFire(optional float F)
 // Used where we need to cease fire on net client, but no point telling server to do same as it will do it's own cease fire, e.g. when running out of ammo or starting a reload
 function ClientOnlyVehicleCeaseFire(bool bWasAltFire)
 {
-
     if (bWasAltFire)
     {
         bWeaponIsAltFiring = false;
@@ -296,6 +313,13 @@ function ClientOnlyVehicleCeaseFire(bool bWasAltFire)
 function bool CanFire()
 {
     return true;
+}
+
+// New helper function to check if player's weapons are locked due to spawn killing, by calling similar function on a DHPlayer Controller
+// Just improves readability where used in several other functions
+function bool ArePlayersWeaponsLocked(optional bool bNoScreenMessage)
+{
+    return DHPlayer(Controller) != none && DHPlayer(Controller).AreWeaponsLocked(bNoScreenMessage);
 }
 
 // Re-stated here just to make into simulated functions, so modified LeanLeft & LeanRight exec functions in DHPlayer can call this on the client as a pre-check
@@ -1634,7 +1658,7 @@ exec function SetAttachOffset(int NewX, int NewY, int NewZ, optional bool bScale
 }
 
 // New debug exec to adjust location of hatch fire position
-exec function SetFEOffset(int NewX, int NewY, int NewZ)
+exec function SetFEOffset(int NewX, int NewY, int NewZ, optional int NewScaleInOneTenths)
 {
     if ((Level.NetMode == NM_Standalone || class'DH_LevelInfo'.static.DHDebugMode()) && VehWep != none)
     {
@@ -1643,6 +1667,12 @@ exec function SetFEOffset(int NewX, int NewY, int NewZ)
             VehWep.FireEffectOffset.X = NewX;
             VehWep.FireEffectOffset.Y = NewY;
             VehWep.FireEffectOffset.Z = NewZ;
+        }
+
+        // Option to re-scale effect (won't accept float as input so have to enter say 9 & convert that to 0.9)
+        if (NewScaleInOneTenths > 0.0)
+        {
+            VehWep.FireEffectScale = float(NewScaleInOneTenths) / 10.0;
         }
 
         VehWep.StartHatchFire();
