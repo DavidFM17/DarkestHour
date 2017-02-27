@@ -280,7 +280,8 @@ def main():
                 row += 1
             # now write out translations to their respective files
             for language in languages[1:]:
-                with open(os.path.join(mod_sys_dir, sheet_name + '.' + language), 'wb') as f:
+                file_path = os.path.join(mod_sys_dir, sheet_name + '.' + language)
+                with open(file_path, 'wb') as f:
                     # iterate over each section
                     for section_name in sections.keys():
                         # we keep a list of key-value pairs to write out, we can query
@@ -315,6 +316,10 @@ def main():
                         for key, value in key_values:
                             f.write('{0}={1}\n'.format(key, value))
                         f.write('\n')
+                if os.stat(file_path).st_size == 0:
+                    os.remove(file_path)
+
+
 
 
 def match_whitespace(original, translated):
