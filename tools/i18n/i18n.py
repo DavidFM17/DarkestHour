@@ -264,20 +264,17 @@ def main():
                     # we got a key/value row on our hands here
                     if sheet[cell].value is not None:
                         key = sheet[cell].value
-                    col = 3
-                    for language in languages[1:]:
-                        # TODO: go searching for the translations across the rows, do a look-up for the
+                    col = 2
+                    for language in languages:
+                        # go searching for the translations across the rows, do a look-up for the cell
                         cell = '{0}{1}'.format(get_column_letter(col), row)
-                        # print (language, sheet_name, cell)
-                        value = sheet[cell].value
-                        if value is None:
-                            col += 1
-                            continue
                         if key not in section:
                             # add key to section
                             section[key] = dict()
+                        if language not in section[key]:
                             section[key][language] = list()
-                        # print (key, language, value)
+
+                        value = sheet[cell].value
                         section[key][language].append(value)
                         col += 1
                 row += 1
@@ -288,14 +285,21 @@ def main():
                     for section_name in sections.keys():
                         kvs = []
                         for key in sections[section_name].keys():
-                            # TODO: make sure present language has anything for this key
+                            # make sure present language has anything for this key
                             if language in sections[section_name][key]:
                                 values = sections[section_name][key][language]
-                                # TODO: check length of values, parse depending on size etc.
-                                if len(values) == 1:
-                                    kvs.append((key, '"' + values[0].encode('cp1252') + '"'))
+                                # fetch the original values
+                                original_values = sections[section_name][key]['int']    # TODO: remove magic string
+                                # check length of values, parse depending on size
+                                if len(values) == 1 and values[0] is not None:
+                                    kvs.append((key, '"' + match_whitespace(original_values[0], values[0]).encode('cp1252') + '"'))
                                 else:
-                                    kvs.append((key, '(' + ','.join(map(lambda x: '"' + x.encode('cp1252') + '"', values)) + ')'))
+                                    # TODO: replace with a for loop
+                                    # make sure that empty translations make it in here!
+                                    asd = map(lambda x: '"' + x.encode('cp1252') + '"' if x is not None else '', values)
+                                    asd = filter(lambda x: x != '', asd)
+                                    if len(asd) > 0:
+                                        kvs.append((key, '(' + ','.join(asd) + ')'))
                         if len(kvs) == 0:
                             continue
                         f.write('[{0}]\n'.format(section_name))
@@ -303,6 +307,12 @@ def main():
                             f.write('{0}={1}\n'.format(kv[0], kv[1]))
                         f.write('\n')
 
+
+def match_whitespace(original, translated):
+    trailing = len(original) - len(original.lstrip(' '))
+    if len(original.strip(' ')) > 0:
+        leading = len(original) - len(original.rstrip(' '))
+    return (' ' * trailing) + translated.strip(' ') + (' ' * leading)
 
 if __name__ == "__main__":
     main()
